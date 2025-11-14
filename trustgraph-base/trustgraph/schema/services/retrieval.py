@@ -67,3 +67,21 @@ class DocumentRetrievalResponse(Record):
     documents = Array(String())  # List of document text chunks
     metadata = Map(String())  # {doc_count, etc.}
 
+############################################################################
+
+# Queue definitions for graph retrieval
+graph_retrieval_request_queue = topic(
+    'graph-retrieval', kind='non-persistent', namespace='request'
+)
+graph_retrieval_response_queue = topic(
+    'graph-retrieval', kind='non-persistent', namespace='response'
+)
+
+# Queue definitions for document retrieval
+document_retrieval_request_queue = topic(
+    'document-retrieval', kind='non-persistent', namespace='request'
+)
+document_retrieval_response_queue = topic(
+    'document-retrieval', kind='non-persistent', namespace='response'
+)
+

@@ -4,14 +4,15 @@ import requests
 import json
 import sys
 
-url = "http://localhost:8088/api/v1/document-retrieval"
+flow_id = "test-retrieval-1"
+url = f"http://localhost:8088/api/v1/flow/{flow_id}/service/document-retrieval"
 
 ############################################################################
 
 input = {
     "query": "Give me information about space exploration",
     "user": "trustgraph",
-    "collection": "default",
+    "collection": flow_id,  # Using the flow we just created
     "doc_limit": 20
 }
 

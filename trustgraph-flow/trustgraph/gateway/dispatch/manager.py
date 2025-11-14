@@ -55,6 +55,8 @@ request_response_dispatchers = {
     "mcp-tool": McpToolRequestor,
     "graph-rag": GraphRagRequestor,
     "document-rag": DocumentRagRequestor,
+    "graph-retrieval": GraphRetrievalRequestor,
+    "document-retrieval": DocumentRetrievalRequestor,
     "embeddings": EmbeddingsRequestor,
     "graph-embeddings": GraphEmbeddingsQueryRequestor,
     "triples": TriplesQueryRequestor,
@@ -70,8 +72,6 @@ global_dispatchers = {
     "librarian": LibrarianRequestor,
     "knowledge": KnowledgeRequestor,
     "collection-management": CollectionManagementRequestor,
-    "graph-retrieval": GraphRetrievalRequestor,
-    "document-retrieval": DocumentRetrievalRequestor,
 }
 
 sender_dispatchers = {
