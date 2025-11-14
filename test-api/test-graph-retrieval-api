@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+
+import requests
+import json
+import sys
+
+url = "http://localhost:8088/api/v1/graph-retrieval"
+
+############################################################################
+
+input = {
+    "query": "Give me 10 facts about NASA",
+    "user": "trustgraph",
+    "collection": "default",
+    "entity_limit": 50,
+    "triple_limit": 30,
+    "max_subgraph_size": 1000,
+    "max_path_length": 2
+}
+
+resp = requests.post(
+    url,
+    json=input,
+)
+
+resp = resp.json()
+
+print("Response:")
+print(json.dumps(resp, indent=2))
+
+if "error" in resp:
+    print(f"\nError: {resp['error']}")
+    sys.exit(1)
+
+if "metadata" in resp:
+    print(f"\nMetadata:")
+    print(f"  Entity count: {resp['metadata'].get('entity_count', 'N/A')}")
+    print(f"  Triple count: {resp['metadata'].get('triple_count', 'N/A')}")
+    print(f"  Max subgraph size: {resp['metadata'].get('max_subgraph_size', 'N/A')}")
+    print(f"  Max path length: {resp['metadata'].get('max_path_length', 'N/A')}")
+
+if "triples" in resp:
+    print(f"\nSample triples (first 5):")
+    for i, triple in enumerate(resp['triples'][:5]):
+        print(f"  {i+1}. ({triple['s']}, {triple['p']}, {triple['o']})")
+
+sys.exit(0)
+
+############################################################################
+
+

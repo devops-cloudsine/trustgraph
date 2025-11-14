@@ -1,5 +1,6 @@
 from typing import Dict, Any, Tuple
 from ...schema import DocumentRagQuery, DocumentRagResponse, GraphRagQuery, GraphRagResponse
+from ...schema import GraphRetrievalQuery, GraphRetrievalResponse, DocumentRetrievalQuery, DocumentRetrievalResponse
 from .base import MessageTranslator
 
 
@@ -77,5 +78,99 @@ class GraphRagResponseTranslator(MessageTranslator):
         }
     
     def from_response_with_completion(self, obj: GraphRagResponse) -> Tuple[Dict[str, Any], bool]:
+        """Returns (response_dict, is_final)"""
+        return self.from_pulsar(obj), True
+
+
+class GraphRetrievalRequestTranslator(MessageTranslator):
+    """Translator for GraphRetrievalQuery schema objects"""
+    
+    def to_pulsar(self, data: Dict[str, Any]) -> GraphRetrievalQuery:
+        return GraphRetrievalQuery(
+            query=data["query"],
+            user=data.get("user", "trustgraph"),
+            collection=data.get("collection", "default"),
+            entity_limit=data.get("entity_limit") or data.get("entity-limit"),
+            triple_limit=data.get("triple_limit") or data.get("triple-limit"),
+            max_subgraph_size=data.get("max_subgraph_size") or data.get("max-subgraph-size"),
+            max_path_length=data.get("max_path_length") or data.get("max-path-length")
+        )
+    
+    def from_pulsar(self, obj: GraphRetrievalQuery) -> Dict[str, Any]:
+        return {
+            "query": obj.query,
+            "user": obj.user,
+            "collection": obj.collection,
+            "entity_limit": obj.entity_limit,
+            "triple_limit": obj.triple_limit,
+            "max_subgraph_size": obj.max_subgraph_size,
+            "max_path_length": obj.max_path_length
+        }
+
+
+class GraphRetrievalResponseTranslator(MessageTranslator):
+    """Translator for GraphRetrievalResponse schema objects"""
+    
+    def to_pulsar(self, data: Dict[str, Any]) -> GraphRetrievalResponse:
+        raise NotImplementedError("Response translation to Pulsar not typically needed")
+    
+    def from_pulsar(self, obj: GraphRetrievalResponse) -> Dict[str, Any]:
+        if obj.error and obj.error.message:
+            return {
+                "error": {
+                    "type": obj.error.type,
+                    "message": obj.error.message
+                }
+            }
+        return {
+            "triples": obj.triples,
+            "metadata": obj.metadata
+        }
+    
+    def from_response_with_completion(self, obj: GraphRetrievalResponse) -> Tuple[Dict[str, Any], bool]:
+        """Returns (response_dict, is_final)"""
+        return self.from_pulsar(obj), True
+
+
+class DocumentRetrievalRequestTranslator(MessageTranslator):
+    """Translator for DocumentRetrievalQuery schema objects"""
+    
+    def to_pulsar(self, data: Dict[str, Any]) -> DocumentRetrievalQuery:
+        return DocumentRetrievalQuery(
+            query=data["query"],
+            user=data.get("user", "trustgraph"),
+            collection=data.get("collection", "default"),
+            doc_limit=data.get("doc_limit") or data.get("doc-limit")
+        )
+    
+    def from_pulsar(self, obj: DocumentRetrievalQuery) -> Dict[str, Any]:
+        return {
+            "query": obj.query,
+            "user": obj.user,
+            "collection": obj.collection,
+            "doc_limit": obj.doc_limit
+        }
+
+
+class DocumentRetrievalResponseTranslator(MessageTranslator):
+    """Translator for DocumentRetrievalResponse schema objects"""
+    
+    def to_pulsar(self, data: Dict[str, Any]) -> DocumentRetrievalResponse:
+        raise NotImplementedError("Response translation to Pulsar not typically needed")
+    
+    def from_pulsar(self, obj: DocumentRetrievalResponse) -> Dict[str, Any]:
+        if obj.error and obj.error.message:
+            return {
+                "error": {
+                    "type": obj.error.type,
+                    "message": obj.error.message
+                }
+            }
+        return {
+            "documents": obj.documents,
+            "metadata": obj.metadata
+        }
+    
+    def from_response_with_completion(self, obj: DocumentRetrievalResponse) -> Tuple[Dict[str, Any], bool]:
         """Returns (response_dict, is_final)"""
         return self.from_pulsar(obj), True

@@ -1,5 +1,5 @@
 
-from pulsar.schema import Record, Bytes, String, Boolean, Integer, Array, Double
+from pulsar.schema import Record, Bytes, String, Boolean, Integer, Array, Double, Map
 from ..core.topic import topic
 from ..core.primitives import Error, Value
 
@@ -33,4 +33,37 @@ class DocumentRagQuery(Record):
 class DocumentRagResponse(Record):
     error = Error()
     response = String()
+
+############################################################################
+
+# Graph Retrieval (without LLM) - returns raw triples and metadata
+
+class GraphRetrievalQuery(Record):
+    query = String()
+    user = String()
+    collection = String()
+    entity_limit = Integer()
+    triple_limit = Integer()
+    max_subgraph_size = Integer()
+    max_path_length = Integer()
+
+class GraphRetrievalResponse(Record):
+    error = Error()
+    triples = Array(Map(String()))  # List of {s, p, o} dicts
+    metadata = Map(String())  # {entity_count, triple_count, etc.}
+
+############################################################################
+
+# Document Retrieval (without LLM) - returns raw document chunks and metadata
+
+class DocumentRetrievalQuery(Record):
+    query = String()
+    user = String()
+    collection = String()
+    doc_limit = Integer()
+
+class DocumentRetrievalResponse(Record):
+    error = Error()
+    documents = Array(String())  # List of document text chunks
+    metadata = Map(String())  # {doc_count, etc.}
 

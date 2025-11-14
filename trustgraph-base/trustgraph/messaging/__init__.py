@@ -7,7 +7,9 @@ from .translators.embeddings import EmbeddingsRequestTranslator, EmbeddingsRespo
 from .translators.text_completion import TextCompletionRequestTranslator, TextCompletionResponseTranslator
 from .translators.retrieval import (
     DocumentRagRequestTranslator, DocumentRagResponseTranslator,
-    GraphRagRequestTranslator, GraphRagResponseTranslator
+    GraphRagRequestTranslator, GraphRagResponseTranslator,
+    GraphRetrievalRequestTranslator, GraphRetrievalResponseTranslator,
+    DocumentRetrievalRequestTranslator, DocumentRetrievalResponseTranslator
 )
 from .translators.triples import TriplesQueryRequestTranslator, TriplesQueryResponseTranslator
 from .translators.knowledge import KnowledgeRequestTranslator, KnowledgeResponseTranslator
@@ -140,6 +142,18 @@ TranslatorRegistry.register_service(
     "collection-management",
     CollectionManagementRequestTranslator(),
     CollectionManagementResponseTranslator()
+)
+
+TranslatorRegistry.register_service(
+    "graph-retrieval",
+    GraphRetrievalRequestTranslator(),
+    GraphRetrievalResponseTranslator()
+)
+
+TranslatorRegistry.register_service(
+    "document-retrieval",
+    DocumentRetrievalRequestTranslator(),
+    DocumentRetrievalResponseTranslator()
 )
 
 # Register single-direction translators for document loading

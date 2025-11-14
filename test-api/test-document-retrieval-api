@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+
+import requests
+import json
+import sys
+
+url = "http://localhost:8088/api/v1/document-retrieval"
+
+############################################################################
+
+input = {
+    "query": "Give me information about space exploration",
+    "user": "trustgraph",
+    "collection": "default",
+    "doc_limit": 20
+}
+
+resp = requests.post(
+    url,
+    json=input,
+)
+
+resp = resp.json()
+
+print("Response:")
+print(json.dumps(resp, indent=2))
+
+if "error" in resp:
+    print(f"\nError: {resp['error']}")
+    sys.exit(1)
+
+if "metadata" in resp:
+    print(f"\nMetadata:")
+    print(f"  Document count: {resp['metadata'].get('doc_count', 'N/A')}")
+    print(f"  Document limit: {resp['metadata'].get('doc_limit', 'N/A')}")
+
+if "documents" in resp:
+    print(f"\nRetrieved {len(resp['documents'])} documents")
+    print(f"\nSample documents (first 3, truncated):")
+    for i, doc in enumerate(resp['documents'][:3]):
+        truncated = doc[:200] + "..." if len(doc) > 200 else doc
+        print(f"  {i+1}. {truncated}")
+
+sys.exit(0)
+
+############################################################################
+
+

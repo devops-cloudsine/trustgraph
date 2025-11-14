@@ -19,6 +19,8 @@ from . text_completion import TextCompletionRequestor
 from . prompt import PromptRequestor
 from . graph_rag import GraphRagRequestor
 from . document_rag import DocumentRagRequestor
+from . graph_retrieval import GraphRetrievalRequestor
+from . document_retrieval import DocumentRetrievalRequestor
 from . triples_query import TriplesQueryRequestor
 from . objects_query import ObjectsQueryRequestor
 from . nlp_query import NLPQueryRequestor
@@ -68,6 +70,8 @@ global_dispatchers = {
     "librarian": LibrarianRequestor,
     "knowledge": KnowledgeRequestor,
     "collection-management": CollectionManagementRequestor,
+    "graph-retrieval": GraphRetrievalRequestor,
+    "document-retrieval": DocumentRetrievalRequestor,
 }
 
 sender_dispatchers = {
