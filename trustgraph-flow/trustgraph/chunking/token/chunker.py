@@ -63,6 +63,7 @@ class Processor(ChunkingService):
 
         logger.info("Token chunker initialized")
 
+    # ---> TextDocument Consumer > [on_message] > flow("output"): Chunk -> document-embeddings
     async def on_message(self, msg, consumer, flow):
 
         v = msg.value()

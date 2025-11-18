@@ -69,6 +69,7 @@ class Processor(FlowProcessor):
             )
         )
 
+    # ---> Gateway request Consumer > [on_request] > DocumentRag.query -> flow('response')
     async def on_request(self, msg, consumer, flow):
 
         try:

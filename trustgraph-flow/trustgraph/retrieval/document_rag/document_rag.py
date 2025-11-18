@@ -19,6 +19,7 @@ class Query:
         self.verbose = verbose
         self.doc_limit = doc_limit
 
+    # ---> DocumentRag.query > [Query.get_vector] > embeddings_client.embed(query)
     async def get_vector(self, query):
 
         if self.verbose:
@@ -31,6 +32,7 @@ class Query:
 
         return qembeds
 
+    # ---> DocumentRag.query > [Query.get_docs] > doc_embeddings_client.query(vectors,user,collection)
     async def get_docs(self, query):
 
         vectors = await self.get_vector(query)
@@ -71,6 +73,7 @@ class DocumentRag:
             doc_limit=20,
     ):
 
+        # ---> Processor.on_request > [DocumentRag.query] > prompt_client.document_prompt(query,docs)
         if self.verbose:
             logger.debug("Constructing prompt...")
 

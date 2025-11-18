@@ -1,4 +1,4 @@
-from pulsar.schema import Record, Bytes
+from pulsar.schema import Record, Bytes, String
 
 from ..core.metadata import Metadata
 from ..core.topic import topic
@@ -9,6 +9,8 @@ from ..core.topic import topic
 class Document(Record):
     metadata = Metadata()
     data = Bytes()
+    content_type = String(default="", required=False)
+    filename = String(default="", required=False)
 
 ############################################################################
 
@@ -27,3 +29,4 @@ class Chunk(Record):
     chunk = Bytes()
 
 ############################################################################
+

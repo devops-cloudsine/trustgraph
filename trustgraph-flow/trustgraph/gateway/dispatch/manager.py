@@ -102,11 +102,12 @@ class DispatcherWrapper:
 
 class DispatcherManager:
 
-    def __init__(self, pulsar_client, config_receiver, prefix="api-gateway"):
+    def __init__(self, pulsar_client, config_receiver, prefix="api-gateway", timeout=120):
         self.pulsar_client = pulsar_client
         self.config_receiver = config_receiver
         self.config_receiver.add_handler(self)
         self.prefix = prefix
+        self.timeout = timeout
 
         self.flows = {}
         self.dispatchers = {}
@@ -154,7 +155,7 @@ class DispatcherManager:
 
         dispatcher = global_dispatchers[kind](
             pulsar_client = self.pulsar_client,
-            timeout = 120,
+            timeout = self.timeout,
             consumer = f"{self.prefix}-{kind}-request",
             subscriber = f"{self.prefix}-{kind}-request",
         )
@@ -289,7 +290,7 @@ class DispatcherManager:
                 pulsar_client = self.pulsar_client,
                 request_queue = qconfig["request"],
                 response_queue = qconfig["response"],
-                timeout = 120,
+                timeout = self.timeout,
                 consumer = f"{self.prefix}-{flow}-{kind}-request",
                 subscriber = f"{self.prefix}-{flow}-{kind}-request",
             )

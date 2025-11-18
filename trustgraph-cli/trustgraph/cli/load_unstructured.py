@@ -1,8 +1,9 @@
 """
-Loads a PDF document into TrustGraph processing by directing to
-the pdf-decoder queue.
-Consider using tg-add-library-document to load
-a document, followed by tg-start-library-processing to initiate processing.
+Loads documents using unstructured decoder for multiple file types.
+Supports: CSV, DOC, DOCX, GIF, HTML, ICS, JPG, JSON, MD, PNG, PPT, PPTX, WEBP, XLS, XLSX, PDF, TXT
+
+This file should be placed at:
+trustgraph-cli/trustgraph/cli/load_unstructured.py
 """
 
 import hashlib
@@ -10,6 +11,7 @@ import argparse
 import os
 import time
 import uuid
+import mimetypes
 from pathlib import Path
 
 from trustgraph.api import Api
@@ -21,6 +23,41 @@ from trustgraph.knowledge import DigitalDocument
 default_url = os.getenv("TRUSTGRAPH_URL", 'http://localhost:8088/')
 default_user = 'trustgraph'
 default_collection = 'default'
+
+# Supported file extensions
+SUPPORTED_EXTENSIONS = {
+    '.csv', '.doc', '.docx', '.gif', '.html', '.htm', '.ics', 
+    '.jpg', '.jpeg', '.json', '.md', '.png', '.ppt', '.pptx', 
+    '.webp', '.xls', '.xlsx', '.pdf', '.txt', '.rtf', '.epub',
+    '.odt', '.odp', '.ods'
+}
+
+EXTENSION_TO_CONTENT_TYPE = {
+    '.csv': 'text/csv',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.gif': 'image/gif',
+    '.html': 'text/html',
+    '.htm': 'text/html',
+    '.ics': 'text/calendar',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.json': 'application/json',
+    '.md': 'text/markdown',
+    '.png': 'image/png',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.webp': 'image/webp',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.pdf': 'application/pdf',
+    '.txt': 'text/plain',
+    '.rtf': 'application/rtf',
+    '.epub': 'application/epub+zip',
+    '.odt': 'application/vnd.oasis.opendocument.text',
+    '.odp': 'application/vnd.oasis.opendocument.presentation',
+    '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+}
 
 class Loader:
 
@@ -49,17 +86,31 @@ class Loader:
         try:
 
             path = Path(file)
+            
+            # Check if file exists
             if not path.exists():
-                raise FileNotFoundError(file)
+                raise FileNotFoundError(f"File not found: {file}")
+            
+            # Check if file extension is supported
+            ext = path.suffix.lower()
+            if ext not in SUPPORTED_EXTENSIONS:
+                print(f"Warning: {file} has unsupported extension {ext}. Attempting to load anyway...")
 
             data = path.read_bytes()
             filename = path.name
-            content_type = "application/pdf"
+            content_type = EXTENSION_TO_CONTENT_TYPE.get(ext)
+            if not content_type:
+                guessed, _ = mimetypes.guess_type(str(path))
+                content_type = guessed or "application/octet-stream"
 
             # Create a SHA256 hash from the data
             id = hash(data)
 
             id = to_uri(PREF_DOC, id)
+
+            # Set filename in metadata if not already set
+            if not self.metadata.name:
+                self.metadata.name = path.name
 
             self.metadata.id = id
 
@@ -71,7 +122,7 @@ class Loader:
                 filename=filename,
             )
 
-            print(f"{file}: Loaded successfully.")
+            print(f"{file}: Loaded successfully (type: {ext})")
 
         except Exception as e:
             print(f"{file}: Failed: {str(e)}", flush=True)
@@ -80,7 +131,7 @@ class Loader:
 def main():
 
     parser = argparse.ArgumentParser(
-        prog='tg-load-pdf',
+        prog='tg-load-unstructured',
         description=__doc__,
     )
 
@@ -158,7 +209,7 @@ def main():
 
     parser.add_argument(
         'files', nargs='+',
-        help=f'File to load'
+        help=f'Files to load (supports: {", ".join(sorted(SUPPORTED_EXTENSIONS))})'
     )
 
     args = parser.parse_args()
@@ -206,3 +257,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

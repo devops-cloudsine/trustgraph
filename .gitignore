@@ -15,3 +15,4 @@ trustgraph-parquet/trustgraph/parquet_version.py
 trustgraph-vertexai/trustgraph/vertexai_version.py
 trustgraph-mcp/trustgraph/mcp_version.py
 vertexai/
+.venv/

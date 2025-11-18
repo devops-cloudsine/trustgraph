@@ -27,7 +27,7 @@ from .. schema import TextDocument, Metadata
 
 from .. exceptions import RequestError
 
-from . librarian import Librarian
+from . librarian import Librarian, SUPPORTED_DOCUMENT_KINDS
 from . collection_manager import CollectionManager
 
 # Module logger
@@ -258,6 +258,7 @@ class Processor(AsyncProcessor):
 
         pass
 
+    # ---> Librarian.add_processing > [load_document] > Publisher -> flow('text-load'|'document-load')
     async def load_document(self, document, processing, content):
 
         logger.debug("Ready for document processing...")
@@ -269,9 +270,17 @@ class Processor(AsyncProcessor):
 
         flow = self.flows[processing.flow]
 
-        if document.kind == "text/plain":
+        document_kind = (document.kind or "").lower()
+
+        # Route textual MIME types to text-load; others to document-load
+        is_textual = (
+            document_kind.startswith("text/") or
+            document_kind in {"application/json"}
+        )
+
+        if is_textual:
             kind = "text-load"
-        elif document.kind == "application/pdf":
+        elif document_kind in SUPPORTED_DOCUMENT_KINDS:
             kind = "document-load"
         else:
             raise RuntimeError("Document with a MIME type I don't know")
@@ -297,7 +306,9 @@ class Processor(AsyncProcessor):
                     user = processing.user,
                     collection = processing.collection
                 ),
-                data = base64.b64encode(content).decode("utf-8")
+                data = base64.b64encode(content).decode("utf-8"),
+                content_type = document.kind,
+                filename = document.title or document.id,
 
             )
             schema = Document
@@ -319,6 +330,7 @@ class Processor(AsyncProcessor):
 
         logger.debug("Document submitted")
 
+    # ---> on_librarian_request > [add_processing_with_collection] > Librarian.add_processing
     async def add_processing_with_collection(self, request):
         """
         Wrapper for add_processing that ensures collection exists
@@ -332,6 +344,7 @@ class Processor(AsyncProcessor):
         # Call the original add_processing method
         return await self.librarian.add_processing(request)
 
+    # ---> HTTP API (Gateway) > [process_request] > dispatch to Librarian/Processor methods
     async def process_request(self, v):
 
         if v.operation is None:
@@ -356,6 +369,7 @@ class Processor(AsyncProcessor):
 
         return await impls[v.operation](v)
 
+    # ---> Pulsar consumer(librarian-request) > [on_librarian_request] > producer(librarian-response)
     async def on_librarian_request(self, msg, consumer, flow):
 
         v = msg.value()

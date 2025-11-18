@@ -65,6 +65,12 @@ container: update-package-versions
 	${DOCKER} build -f containers/Containerfile.mcp \
 	    -t ${CONTAINER_BASE}/trustgraph-mcp:${VERSION} .
 
+container-trustgraph-flow-dev: update-package-versions
+	${DOCKER} build -f Containerfile.dev -t ${CONTAINER_BASE}/trustgraph-flow:dev .
+
+container-trustgraph-ocr-dev: update-package-versions
+	${DOCKER} build -f Containerfile.ocr.dev -t ${CONTAINER_BASE}/trustgraph-ocr:dev .
+
 some-containers:
 	${DOCKER} build -f containers/Containerfile.base \
 	    -t ${CONTAINER_BASE}/trustgraph-base:${VERSION} .

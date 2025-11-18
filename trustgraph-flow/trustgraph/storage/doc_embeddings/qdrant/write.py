@@ -77,6 +77,7 @@ class Processor(DocumentEmbeddingsStoreService):
         if hasattr(self, 'storage_response_producer'):
             await self.storage_response_producer.start()
 
+    # ---> DocumentEmbeddings Consumer > [store_document_embeddings] > Qdrant.upsert(payload.doc)
     async def store_document_embeddings(self, message):
 
         # Validate collection exists before accepting writes
@@ -85,13 +86,35 @@ class Processor(DocumentEmbeddingsStoreService):
             message.metadata.collection
         )
 
-        if not self.qdrant.collection_exists(collection):
-            error_msg = (
-                f"Collection {message.metadata.collection} does not exist. "
-                f"Create it first with tg-set-collection."
-            )
-            logger.error(error_msg)
-            raise ValueError(error_msg)
+        # Ensure Qdrant collection exists (create if needed using first vector's dimension)
+        try:
+            if not self.qdrant.collection_exists(collection):
+                # Derive vector dimension from the first available vector
+                vector_dim = None
+                for emb in message.chunks:
+                    if emb.vectors:
+                        first_vec = emb.vectors[0]
+                        vector_dim = len(first_vec)
+                        break
+                if vector_dim is None:
+                    logger.warning(
+                        "No vectors found in message for %s; skipping store.",
+                        collection
+                    )
+                    return
+                logger.info(
+                    "Creating Qdrant collection %s with dim=%d",
+                    collection, vector_dim
+                )
+                self.qdrant.create_collection(
+                    collection_name=collection,
+                    vectors_config=VectorParams(
+                        size=vector_dim, distance=Distance.COSINE
+                    ),
+                )
+        except Exception as e:
+            logger.error(f"Failed ensuring collection {collection}: {e}", exc_info=True)
+            raise
 
         for emb in message.chunks:
 

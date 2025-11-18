@@ -74,6 +74,7 @@ class Api:
             pulsar_client = self.pulsar_client,
             config_receiver = self.config_receiver,
             prefix = "gateway",
+            timeout = self.timeout,
         )
 
         self.endpoint_manager = EndpointManager(

@@ -308,7 +308,7 @@ class FlowInstance:
 
     def load_document(
             self, document, id=None, metadata=None, user=None,
-            collection=None,
+            collection=None, content_type=None, filename=None,
     ):
 
         if id is None:
@@ -347,6 +347,10 @@ class FlowInstance:
 
         if collection:
             input["collection"] = collection
+        if content_type:
+            input["content_type"] = content_type
+        if filename:
+            input["filename"] = filename
 
         return self.request(
             "service/document-load",

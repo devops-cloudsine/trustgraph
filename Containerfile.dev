@@ -1,0 +1,16 @@
+FROM docker.io/trustgraph/trustgraph-flow:1.4.23
+
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
+WORKDIR /src
+
+# Provide a fallback copy of the sources in case the container is
+# started without bind-mounting the repository.
+COPY trustgraph-base/ /src/trustgraph-base/
+COPY trustgraph-flow/ /src/trustgraph-flow/
+
+RUN python -m pip install --no-cache-dir --upgrade pip && \
+    python -m pip install --no-cache-dir \
+        -e /src/trustgraph-base \
+        -e /src/trustgraph-flow
+

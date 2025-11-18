@@ -1,0 +1,19 @@
+FROM docker.io/trustgraph/trustgraph-ocr:1.4.23
+
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
+WORKDIR /src
+
+# Provide a fallback copy of the sources in case the container is
+# started without bind-mounting the repository.
+COPY trustgraph-base/ /src/trustgraph-base/
+COPY trustgraph-ocr/ /src/trustgraph-ocr/
+
+RUN python -m pip install --no-cache-dir --upgrade pip && \
+    pip uninstall -y trustgraph-base trustgraph-ocr && \
+    python -m pip install --no-cache-dir --no-deps \
+        -e /src/trustgraph-base && \
+    python -m pip install --no-cache-dir --no-deps \
+        -e /src/trustgraph-ocr
+
+

@@ -12,6 +12,34 @@ import uuid
 # Module logger
 logger = logging.getLogger(__name__)
 
+# Textual kinds are routed to text-load
+SUPPORTED_TEXT_KINDS = {
+    "text/plain",
+    "text/csv",
+    "text/html",
+    "text/calendar",
+    "text/markdown",
+    "application/json",
+}
+
+# Binary/non-text kinds are routed to document-load
+SUPPORTED_BINARY_KINDS = {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "image/gif",
+    "image/jpeg",
+    "image/png",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "image/webp",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
+# Backward-compatible union of supported kinds
+SUPPORTED_DOCUMENT_KINDS = SUPPORTED_TEXT_KINDS | SUPPORTED_BINARY_KINDS
+
 class Librarian:
 
     def __init__(
@@ -31,13 +59,17 @@ class Librarian:
 
         self.load_document = load_document
 
+    # ---> HTTP API Gateway > Processor.process_request('add-document') > [Librarian.add_document] > BlobStore.add + LibraryTableStore.add_document
     async def add_document(self, request):
 
-        if request.document_metadata.kind not in (
-                "text/plain", "application/pdf"
-        ):
+        kind = (request.document_metadata.kind or "").lower()
+
+        if kind not in SUPPORTED_DOCUMENT_KINDS:
             raise RequestError(
-                "Invalid document kind: " + request.document_metadata.kind
+                "Invalid document kind: "
+                + str(request.document_metadata.kind)
+                + ". Supported kinds: "
+                + ", ".join(sorted(SUPPORTED_DOCUMENT_KINDS))
             )
 
         if await self.table_store.document_exists(
@@ -72,6 +104,7 @@ class Librarian:
             processing_metadatas = None,
         )
 
+    # ---> HTTP API Gateway > Processor.process_request('remove-document') > [Librarian.remove_document] > BlobStore.remove + LibraryTableStore.remove_document
     async def remove_document(self, request):
 
         logger.debug("Removing document...")
@@ -106,6 +139,7 @@ class Librarian:
             processing_metadatas = None,
         )
 
+    # ---> HTTP API Gateway > Processor.process_request('update-document') > [Librarian.update_document] > LibraryTableStore.update_document
     async def update_document(self, request):
 
         logger.debug("Updating document...")
@@ -130,6 +164,7 @@ class Librarian:
             processing_metadatas = None,
         )
 
+    # ---> HTTP API Gateway > Processor.process_request('get-document-metadata') > [Librarian.get_document_metadata] > returns LibrarianResponse
     async def get_document_metadata(self, request):
 
         logger.debug("Getting document metadata...")
@@ -149,6 +184,7 @@ class Librarian:
             processing_metadatas = None,
         )
 
+    # ---> HTTP API Gateway > Processor.process_request('get-document-content') > [Librarian.get_document_content] > BlobStore.get -> returns LibrarianResponse
     async def get_document_content(self, request):
 
         logger.debug("Getting document content...")
@@ -167,11 +203,12 @@ class Librarian:
         return LibrarianResponse(
             error = None,
             document_metadata = None,
-            content = base64.b64encode(content),
+            content = base64.b64encode(content).decode("utf-8"),
             document_metadatas = None,
             processing_metadatas = None,
         )
 
+    # ---> Processor.add_processing_with_collection > [Librarian.add_processing] > Processor.load_document(document) -> flow('text-load'|'document-load')
     async def add_processing(self, request):
 
         logger.debug("Adding processing metadata...")
@@ -223,6 +260,7 @@ class Librarian:
             processing_metadatas = None,
         )
 
+    # ---> HTTP API Gateway > Processor.process_request('remove-processing') > [Librarian.remove_processing] > LibraryTableStore.remove_processing
     async def remove_processing(self, request):
 
         logger.debug("Removing processing metadata...")
@@ -249,6 +287,7 @@ class Librarian:
             processing_metadatas = None,
         )
 
+    # ---> HTTP API Gateway > Processor.process_request('list-documents') > [Librarian.list_documents] > returns LibrarianResponse
     async def list_documents(self, request):
 
         docs = await self.table_store.list_documents(request.user)
@@ -261,6 +300,7 @@ class Librarian:
             processing_metadatas = None,
         )
 
+    # ---> HTTP API Gateway > Processor.process_request('list-processing') > [Librarian.list_processing] > returns LibrarianResponse
     async def list_processing(self, request):
 
         procs = await self.table_store.list_processing(request.user)

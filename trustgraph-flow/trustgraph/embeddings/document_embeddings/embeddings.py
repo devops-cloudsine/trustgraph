@@ -53,6 +53,7 @@ class Processor(FlowProcessor):
             )
         )
 
+    # ---> Chunk Consumer > [on_message] > flow('embeddings-request')->vectors -> flow('output'): DocumentEmbeddings
     async def on_message(self, msg, consumer, flow):
 
         v = msg.value()

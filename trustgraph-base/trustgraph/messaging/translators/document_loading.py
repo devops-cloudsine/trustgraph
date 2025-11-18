@@ -17,6 +17,8 @@ class DocumentTranslator(SendTranslator):
         
         # Handle base64 content validation
         doc = base64.b64decode(data["data"])
+        content_type = data.get("content_type")
+        filename = data.get("filename")
         
         from ...schema import Metadata
         return Document(
@@ -26,13 +28,20 @@ class DocumentTranslator(SendTranslator):
                 user=data.get("user", "trustgraph"),
                 collection=data.get("collection", "default"),
             ),
-            data=base64.b64encode(doc).decode("utf-8")
+            data=base64.b64encode(doc).decode("utf-8"),
+            content_type=content_type,
+            filename=filename,
         )
     
     def from_pulsar(self, obj: Document) -> Dict[str, Any]:
         result = {
             "data": obj.data
         }
+        
+        if getattr(obj, "content_type", None):
+            result["content_type"] = obj.content_type
+        if getattr(obj, "filename", None):
+            result["filename"] = obj.filename
         
         if obj.metadata:
             metadata_dict = {}

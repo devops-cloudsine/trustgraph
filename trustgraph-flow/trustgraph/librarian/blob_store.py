@@ -41,6 +41,7 @@ class BlobStore:
         else:
             logger.debug(f"Bucket {self.bucket_name} already exists")
 
+    # ---> Librarian.add_document > [BlobStore.add] > MinIO.put_object('doc/<uuid>')
     async def add(self, object_id, blob, kind):
 
         # FIXME: Loop retry
@@ -54,6 +55,7 @@ class BlobStore:
 
         logger.debug("Add blob complete")
 
+    # ---> Librarian.remove_document > [BlobStore.remove] > MinIO.remove_object('doc/<uuid>')
     async def remove(self, object_id):
 
         # FIXME: Loop retry
@@ -65,6 +67,7 @@ class BlobStore:
         logger.debug("Remove blob complete")
 
 
+    # ---> Librarian.get_document_content | Librarian.add_processing > [BlobStore.get] > MinIO.get_object('doc/<uuid>').read()
     async def get(self, object_id):
 
         # FIXME: Loop retry
