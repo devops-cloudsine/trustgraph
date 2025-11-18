@@ -207,25 +207,47 @@ class Processor(FlowProcessor):
         )
 
         segments: List[str] = []
+        # Prefer dedicated OCR for images to avoid unstructured's tesseract dependency
+        if self._is_image_content_type(content_type):
+            try:
+                # // ---> on_message(image/*) > [_ocr_image] > returns textual segments
+                segments = self._ocr_image(blob)
+                if segments:
+                    logger.debug(
+                        "Image OCR produced %d segment(s) for %s",
+                        len(segments),
+                        document.metadata.id,
+                    )
+            except Exception as exc:  # pragma: no cover - defensive logging for OCR
+                logger.error(
+                    "Image OCR failed for %s: %s",
+                    document.metadata.id,
+                    exc,
+                    exc_info=True,
+                )
+                segments = []
+
         if partition is None:
             logger.warning(
                 "Unstructured partition unavailable; using fallback for %s",
                 document.metadata.id
             )
         else:
-            try:
-                segments = self._partition_document(
-                    blob=blob,
-                    metadata_filename=filename_hint,
-                )
-            except Exception as exc:  # pragma: no cover - defensive logging
-                logger.error(
-                    "unstructured partition failed for %s: %s",
-                    document.metadata.id,
-                    exc,
-                    exc_info=True,
-                )
-                segments = []
+            # Only attempt unstructured partition if we don't already have OCR text
+            if not segments:
+                try:
+                    segments = self._partition_document(
+                        blob=blob,
+                        metadata_filename=filename_hint,
+                    )
+                except Exception as exc:  # pragma: no cover - defensive logging
+                    logger.error(
+                        "unstructured partition failed for %s: %s",
+                        document.metadata.id,
+                        exc,
+                        exc_info=True,
+                    )
+                    segments = []
 
         if not segments:
             segments = self._fallback_segments(blob, content_type)
@@ -272,6 +294,44 @@ class Processor(FlowProcessor):
             text for text in (self._element_text(element) for element in elements)
             if text
         ]
+
+    # // ---> on_message > [_is_image_content_type] > guards OCR branch for images
+    def _is_image_content_type(self, content_type: Optional[str]) -> bool:
+        if not content_type:
+            return False
+        lowered = content_type.strip().lower()
+        return lowered in IMAGE_KIND_TO_CONTENT_TYPE.values()
+
+    # // ---> on_message(image/*) > [_ocr_image] > returns textual segments
+    def _ocr_image(self, blob: bytes) -> List[str]:
+        """
+        Perform OCR on an image blob using pytesseract if available.
+        Falls back to empty list if library or system dependency is missing.
+        """
+        try:
+            from PIL import Image  # type: ignore
+            import pytesseract  # type: ignore
+        except Exception as import_error:
+            logger.warning(
+                "pytesseract/Pillow not available for image OCR: %s; skipping OCR.",
+                import_error,
+            )
+            return []
+
+        try:
+            image = Image.open(BytesIO(blob))
+        except Exception as open_error:
+            logger.warning("Unable to open image for OCR: %s", open_error)
+            return []
+
+        try:
+            text = pytesseract.image_to_string(image, lang="eng")
+        except Exception as ocr_error:
+            logger.warning("pytesseract OCR failed: %s", ocr_error)
+            return []
+
+        cleaned = (text or "").strip()
+        return [cleaned] if cleaned else []
 
     @staticmethod
     def _element_text(element) -> Optional[str]:
