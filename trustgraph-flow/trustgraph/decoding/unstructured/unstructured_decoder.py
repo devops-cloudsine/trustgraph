@@ -6,14 +6,27 @@ segments by delegating parsing to the unstructured open-source library.
 from __future__ import annotations
 
 import base64
-import imghdr
 import logging
-import zipfile
-from io import BytesIO
 from typing import List, Optional
 
 from ...schema import Document, TextDocument
 from ...base import FlowProcessor, ConsumerSpec, ProducerSpec
+from .content_type_detection import (
+    CONTENT_TYPE_EXTENSION_MAP,
+    guess_content_type as _guess_content_type,
+    IMAGE_KIND_TO_CONTENT_TYPE,
+)
+from .image_processing import (
+    is_image_content_type as _is_image_content_type_impl,
+    ocr_image as _ocr_image_impl,
+)
+from .partition_processing import (
+    partition_document as _partition_document_impl,
+    element_text as _element_text_impl,
+)
+from .fallback_processing import (
+    fallback_segments as _fallback_segments_impl,
+)
 
 try:
     from unstructured.partition.auto import partition
@@ -26,124 +39,7 @@ else:
 logger = logging.getLogger(__name__)
 default_ident = "unstructured-decoder"
 
-CONTENT_TYPE_EXTENSION_MAP = {
-    "application/pdf": ".pdf",
-    "text/csv": ".csv",
-    "application/msword": ".doc",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
-    "image/gif": ".gif",
-    "text/html": ".html",
-    "text/calendar": ".ics",
-    "image/jpeg": ".jpg",
-    "application/json": ".json",
-    "text/markdown": ".md",
-    "image/png": ".png",
-    "application/vnd.ms-powerpoint": ".ppt",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
-    "image/webp": ".webp",
-    "application/vnd.ms-excel": ".xls",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
-    "text/plain": ".txt",
-}
-
-IMAGE_KIND_TO_CONTENT_TYPE = {
-    "jpeg": "image/jpeg",
-    "png": "image/png",
-    "gif": "image/gif",
-    "webp": "image/webp",
-}
-
-OLE_SIGNATURE = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
-ZIP_SIGNATURE = b"PK\x03\x04"
-
-
-def _safe_text_sample(blob: bytes, limit: int = 4096) -> Optional[str]:
-    snippet = blob[:limit]
-    try:
-        return snippet.decode("utf-8")
-    except UnicodeDecodeError:
-        try:
-            return snippet.decode("utf-8", errors="ignore")
-        except Exception:
-            return None
-
-
-def _looks_textual(sample: str) -> bool:
-    if not sample:
-        return False
-    printable = sum(1 for ch in sample if ch.isprintable() or ch.isspace())
-    return printable / max(1, len(sample)) >= 0.6
-
-
-def _guess_zip_content_type(blob: bytes) -> Optional[str]:
-    try:
-        with zipfile.ZipFile(BytesIO(blob)) as archive:
-            names = archive.namelist()
-    except zipfile.BadZipFile:
-        return None
-
-    if any(name.startswith("word/") for name in names):
-        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    if any(name.startswith("ppt/") for name in names):
-        return "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-    if any(name.startswith("xl/") for name in names):
-        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    return None
-
-
-def _guess_ole_content_type(blob: bytes) -> Optional[str]:
-    if not blob.startswith(OLE_SIGNATURE):
-        return None
-    lowered = blob.lower()
-    if b"worddocument" in lowered:
-        return "application/msword"
-    if b"powerpoint document" in lowered:
-        return "application/vnd.ms-powerpoint"
-    if b"workbook" in lowered:
-        return "application/vnd.ms-excel"
-    return None
-
-
-def _guess_textual_content_type(sample: str) -> str:
-    stripped = sample.lstrip()
-    lowered = stripped.lower()
-
-    if lowered.startswith("{") or lowered.startswith("["):
-        return "application/json"
-    if "<html" in lowered or "<!doctype html" in lowered:
-        return "text/html"
-    if "begin:vcalendar" in lowered:
-        return "text/calendar"
-
-    first_line = stripped.splitlines()[0] if stripped else ""
-    if ("," in first_line or "\t" in first_line or ";" in first_line) and "\n" in sample:
-        return "text/csv"
-    if first_line.strip().startswith("#") or "```" in sample:
-        return "text/markdown"
-    return "text/plain"
-
-
-def _guess_content_type(blob: bytes) -> Optional[str]:
-    if blob.startswith(b"%PDF"):
-        return "application/pdf"
-    if blob.startswith(ZIP_SIGNATURE):
-        guess = _guess_zip_content_type(blob)
-        if guess:
-            return guess
-    if blob.startswith(OLE_SIGNATURE):
-        guess = _guess_ole_content_type(blob)
-        if guess:
-            return guess
-
-    image_kind = imghdr.what(None, blob)
-    if image_kind:
-        return IMAGE_KIND_TO_CONTENT_TYPE.get(image_kind)
-
-    sample = _safe_text_sample(blob)
-    if sample and _looks_textual(sample):
-        return _guess_textual_content_type(sample)
-
-    return None
+ 
 
 
 class Processor(FlowProcessor):
@@ -207,8 +103,9 @@ class Processor(FlowProcessor):
         )
 
         segments: List[str] = []
-        # Prefer dedicated OCR for images to avoid unstructured's tesseract dependency
-        if self._is_image_content_type(content_type):
+        # Prefer dedicated OCR for images and skip unstructured partition for image/* entirely
+        is_image = self._is_image_content_type(content_type)
+        if is_image:
             try:
                 # // ---> on_message(image/*) > [_ocr_image] > returns textual segments
                 segments = self._ocr_image(blob)
@@ -227,27 +124,30 @@ class Processor(FlowProcessor):
                 )
                 segments = []
 
-        if partition is None:
-            logger.warning(
-                "Unstructured partition unavailable; using fallback for %s",
-                document.metadata.id
-            )
-        else:
-            # Only attempt unstructured partition if we don't already have OCR text
-            if not segments:
-                try:
-                    segments = self._partition_document(
-                        blob=blob,
-                        metadata_filename=filename_hint,
+        # Only attempt unstructured partition for non-image content
+        if not is_image:
+            if partition is None:
+                if not segments:
+                    logger.warning(
+                        "Unstructured partition unavailable; using fallback for %s",
+                        document.metadata.id
                     )
-                except Exception as exc:  # pragma: no cover - defensive logging
-                    logger.error(
-                        "unstructured partition failed for %s: %s",
-                        document.metadata.id,
-                        exc,
-                        exc_info=True,
-                    )
-                    segments = []
+            else:
+                # Only attempt unstructured partition if we don't already have text
+                if not segments:
+                    try:
+                        segments = self._partition_document(
+                            blob=blob,
+                            metadata_filename=filename_hint,
+                        )
+                    except Exception as exc:  # pragma: no cover - defensive logging
+                        logger.error(
+                            "unstructured partition failed for %s: %s",
+                            document.metadata.id,
+                            exc,
+                            exc_info=True,
+                        )
+                        segments = []
 
         if not segments:
             segments = self._fallback_segments(blob, content_type)
@@ -285,61 +185,19 @@ class Processor(FlowProcessor):
         blob: bytes,
         metadata_filename: Optional[str],
     ) -> List[str]:
-        kwargs = {"file": BytesIO(blob)}
-        if metadata_filename:
-            kwargs["metadata_filename"] = metadata_filename
-
-        elements = partition(**kwargs)
-        return [
-            text for text in (self._element_text(element) for element in elements)
-            if text
-        ]
+        return _partition_document_impl(blob=blob, metadata_filename=metadata_filename)
 
     # // ---> on_message > [_is_image_content_type] > guards OCR branch for images
     def _is_image_content_type(self, content_type: Optional[str]) -> bool:
-        if not content_type:
-            return False
-        lowered = content_type.strip().lower()
-        return lowered in IMAGE_KIND_TO_CONTENT_TYPE.values()
+        return _is_image_content_type_impl(content_type)
 
     # // ---> on_message(image/*) > [_ocr_image] > returns textual segments
     def _ocr_image(self, blob: bytes) -> List[str]:
-        """
-        Perform OCR on an image blob using pytesseract if available.
-        Falls back to empty list if library or system dependency is missing.
-        """
-        try:
-            from PIL import Image  # type: ignore
-            import pytesseract  # type: ignore
-        except Exception as import_error:
-            logger.warning(
-                "pytesseract/Pillow not available for image OCR: %s; skipping OCR.",
-                import_error,
-            )
-            return []
-
-        try:
-            image = Image.open(BytesIO(blob))
-        except Exception as open_error:
-            logger.warning("Unable to open image for OCR: %s", open_error)
-            return []
-
-        try:
-            text = pytesseract.image_to_string(image, lang="eng")
-        except Exception as ocr_error:
-            logger.warning("pytesseract OCR failed: %s", ocr_error)
-            return []
-
-        cleaned = (text or "").strip()
-        return [cleaned] if cleaned else []
+        return _ocr_image_impl(blob)
 
     @staticmethod
     def _element_text(element) -> Optional[str]:
-        text = getattr(element, "text", None)
-        if not text:
-            return None
-        cleaned = text.strip()
-        return cleaned if cleaned else None
+        return _element_text_impl(element)
 
     # // ---> on_message > [_fallback_segments] > ensures downstream processors receive text
     def _fallback_segments(
@@ -347,15 +205,7 @@ class Processor(FlowProcessor):
         blob: bytes,
         content_type: Optional[str],
     ) -> List[str]:
-        sample = _safe_text_sample(blob)
-        if sample and sample.strip():
-            return [sample]
-
-        logger.warning(
-            "Unable to decode %s content, emitting placeholder text.",
-            content_type or "unknown",
-        )
-        return ["[binary document contents elided]"]
+        return _fallback_segments_impl(blob, content_type)
 
     @staticmethod
     def add_args(parser):
