@@ -72,6 +72,11 @@ class Processor(LlmService):
 
         try:
 
+            # NOTE: Do NOT include "response_format" parameter for plain text responses.
+            # vLLM v0.11.0+ (V1 engine) has a bug where any response_format (even {"type": "text"})
+            # triggers structured output validation that fails with:
+            # "ValueError: No valid structured output parameter found"
+            # Plain text is the default, so omitting response_format works correctly.
             resp = self.openai.chat.completions.create(
                 model=model_name,
                 messages=[
@@ -90,9 +95,6 @@ class Processor(LlmService):
                 top_p=1,
                 frequency_penalty=0,
                 presence_penalty=0,
-                response_format={
-                    "type": "text"
-                }
             )
             
             inputtokens = resp.usage.prompt_tokens

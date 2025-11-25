@@ -16,6 +16,7 @@ dependencies = [
     "boto3",
     "pdf2image",
     "pytesseract",
+    "requests",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",

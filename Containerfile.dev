@@ -50,7 +50,9 @@ RUN set -eux; \
 # Pre-install heavy Python deps that rarely change so Docker can cache the layer.
 # This avoids pip installing them on every rebuild when source code changes.
 RUN python -m pip install --no-cache-dir --upgrade pip && \
-    python -m pip install --no-cache-dir "unstructured[all-docs]" pillow pytesseract
+    python -m pip install --no-cache-dir "unstructured[all-docs]" pillow pytesseract Spire.PDF requests asyncio && \
+    python -m pip uninstall -y onnxruntime || true && \
+    python -m pip install --no-cache-dir "onnxruntime-gpu>=1.17,<1.19"
 
 # Provide a fallback copy of the sources in case the container is
 # started without bind-mounting the repository.

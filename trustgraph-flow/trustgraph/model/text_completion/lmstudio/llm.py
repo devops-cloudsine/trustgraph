@@ -76,9 +76,7 @@ class Processor(LlmService):
                 top_p=1,
                 frequency_penalty=0,
                 presence_penalty=0,
-                response_format={
-                    "type": "text"
-                }
+                # NOTE: Do NOT include response_format for vLLM compatibility
             )
 
             logger.debug(f"Full response: {resp}")
