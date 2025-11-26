@@ -21,6 +21,7 @@ import hashlib
 import logging
 import os
 import re
+import time
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -65,6 +66,8 @@ default_ident = "pptx-decoder"
 MAX_CONCURRENT_VLLM_REQUESTS = 4  # Max parallel vLLM requests
 VLLM_TIMEOUT_SECONDS = 180  # Timeout for vLLM requests
 MAX_IMAGE_SIZE_MB = 10  # Skip images larger than this
+VLLM_MAX_RETRIES = 3  # Max retries for vLLM requests
+VLLM_RETRY_DELAY_SECONDS = 2  # Delay between retries
 
 
 class Processor(FlowProcessor):
@@ -107,115 +110,127 @@ class Processor(FlowProcessor):
 
     # // ---> Pulsar consumer(input) > [on_message] > extract slides/text/images, vLLM describe -> flow('output')
     async def on_message(self, msg, consumer, flow):
-        logger.info("PPTX message received for extraction")
-
-        v = msg.value()
-        logger.info(f"Processing {v.metadata.id}...")
-
-        blob = base64.b64decode(v.data)
-
-        # Check if this is a PPTX file
-        content_type = getattr(v, "content_type", None)
-        if not self._is_pptx(blob, content_type):
-            logger.info(f"Skipping non-PPTX file: {v.metadata.id} (content_type: {content_type})")
-            return
-
-        # Prepare output directories
-        doc_dir = os.path.join(self.files_base_dir, self._safe_id(v.metadata.id))
-        os.makedirs(doc_dir, exist_ok=True)
-        images_dir = os.path.join(doc_dir, "images")
-        os.makedirs(images_dir, exist_ok=True)
-
-        # Save PPTX to file
-        temp_pptx_path = os.path.join(doc_dir, "source.pptx")
+        """
+        Main message handler with top-level exception handling.
+        Pulsar will redeliver the message if this method raises an exception.
+        """
+        v = None
         try:
-            with open(temp_pptx_path, "wb") as f:
-                f.write(blob)
-            logger.debug(f"Saved PPTX to file: {temp_pptx_path}")
-        except Exception as e:
-            logger.error(f"Failed to save PPTX to file: {e}")
-            # Try in-memory fallback
-            await self._process_with_fallback(blob, images_dir, v, flow)
-            return
+            logger.info("PPTX message received for extraction")
 
-        # Track processed image hashes for deduplication
-        processed_hashes: Set[str] = set()
-        all_images: List[Dict[str, Any]] = []
-        structured_data = None
-        pptx_success = False
+            v = msg.value()
+            logger.info(f"Processing {v.metadata.id}...")
 
-        # Try python-pptx extraction
-        if PPTX_AVAILABLE:
-            pptx_success, structured_data, all_images = self._try_pptx_extraction(
-                temp_pptx_path, blob, images_dir, processed_hashes
-            )
+            blob = base64.b64decode(v.data)
 
-        # Fallback to zipfile extraction if python-pptx failed
-        if not pptx_success:
-            logger.info("Using zipfile fallback extraction")
-            fallback_images = self._extract_images_from_zip(blob, images_dir, processed_hashes)
-            for ix, (image_path, original_name) in enumerate(fallback_images):
-                all_images.append({
-                    "path": image_path,
-                    "context": f"Image {ix + 1} ({original_name})",
-                    "slide_number": None,
-                    "shape_index": None
-                })
-            structured_data = {
-                "presentation": {
-                    "total_slides": 0,
-                    "slides": [],
-                    "note": "Extracted via zipfile fallback"
-                }
-            }
-            logger.info(f"Fallback: Found {len(fallback_images)} images")
+            # Check if this is a PPTX file
+            content_type = getattr(v, "content_type", None)
+            if not self._is_pptx(blob, content_type):
+                logger.info(f"Skipping non-PPTX file: {v.metadata.id} (content_type: {content_type})")
+                return
 
-        # Send presentation header first
-        if structured_data:
-            # Get filename from metadata or path
-            filename = getattr(v.metadata, 'id', 'presentation') + '.pptx'
-            header = self._format_presentation_header(structured_data, filename)
-            if header.strip():
-                logger.info(f"Sending presentation header to RAG ({len(header)} chars)")
-                logger.debug(f"Header content:\n{header[:500]}{'...' if len(header) > 500 else ''}")
-                r = TextDocument(
-                    metadata=v.metadata,
-                    text=header.encode("utf-8"),
+            # Prepare output directories
+            doc_dir = os.path.join(self.files_base_dir, self._safe_id(v.metadata.id))
+            os.makedirs(doc_dir, exist_ok=True)
+            images_dir = os.path.join(doc_dir, "images")
+            os.makedirs(images_dir, exist_ok=True)
+
+            # Save PPTX to file
+            temp_pptx_path = os.path.join(doc_dir, "source.pptx")
+            try:
+                with open(temp_pptx_path, "wb") as f:
+                    f.write(blob)
+                logger.debug(f"Saved PPTX to file: {temp_pptx_path}")
+            except Exception as e:
+                logger.error(f"Failed to save PPTX to file: {e}")
+                # Try in-memory fallback
+                await self._process_with_fallback(blob, images_dir, v, flow)
+                return
+
+            # Track processed image hashes for deduplication
+            processed_hashes: Set[str] = set()
+            all_images: List[Dict[str, Any]] = []
+            structured_data = None
+            pptx_success = False
+
+            # Try python-pptx extraction
+            if PPTX_AVAILABLE:
+                pptx_success, structured_data, all_images = self._try_pptx_extraction(
+                    temp_pptx_path, blob, images_dir, processed_hashes
                 )
-                await flow("output").send(r)
 
-        # Send text content from each slide
-        if structured_data and structured_data["presentation"]["slides"]:
-            for slide_data in structured_data["presentation"]["slides"]:
-                slide_text = self._format_slide_text(slide_data)
-                if slide_text.strip():
-                    slide_num = slide_data.get("slide_number", "?")
-                    logger.info(f"Sending slide {slide_num} content to RAG ({len(slide_text)} chars)")
-                    logger.debug(f"Slide {slide_num} content:\n{slide_text[:500]}{'...' if len(slide_text) > 500 else ''}")
+            # Fallback to zipfile extraction if python-pptx failed
+            if not pptx_success:
+                logger.info("Using zipfile fallback extraction")
+                fallback_images = self._extract_images_from_zip(blob, images_dir, processed_hashes)
+                for ix, (image_path, original_name) in enumerate(fallback_images):
+                    all_images.append({
+                        "path": image_path,
+                        "context": f"Image {ix + 1} ({original_name})",
+                        "slide_number": None,
+                        "shape_index": None
+                    })
+                structured_data = {
+                    "presentation": {
+                        "total_slides": 0,
+                        "slides": [],
+                        "note": "Extracted via zipfile fallback"
+                    }
+                }
+                logger.info(f"Fallback: Found {len(fallback_images)} images")
+
+            # Send presentation header first
+            if structured_data:
+                # Get filename from metadata or path
+                filename = getattr(v.metadata, 'id', 'presentation') + '.pptx'
+                header = self._format_presentation_header(structured_data, filename)
+                if header.strip():
+                    logger.info(f"Sending presentation header to RAG ({len(header)} chars)")
+                    logger.debug(f"Header content:\n{header[:500]}{'...' if len(header) > 500 else ''}")
                     r = TextDocument(
                         metadata=v.metadata,
-                        text=slide_text.encode("utf-8"),
+                        text=header.encode("utf-8"),
                     )
                     await flow("output").send(r)
 
-        # Process images with concurrent vLLM requests
-        if all_images:
-            logger.info(f"Processing {len(all_images)} unique images with concurrent vLLM requests")
-            image_descriptions = await self._describe_images_concurrent(all_images)
+            # Send text content from each slide
+            if structured_data and structured_data["presentation"]["slides"]:
+                for slide_data in structured_data["presentation"]["slides"]:
+                    slide_text = self._format_slide_text(slide_data)
+                    if slide_text.strip():
+                        slide_num = slide_data.get("slide_number", "?")
+                        logger.info(f"Sending slide {slide_num} content to RAG ({len(slide_text)} chars)")
+                        logger.debug(f"Slide {slide_num} content:\n{slide_text[:500]}{'...' if len(slide_text) > 500 else ''}")
+                        r = TextDocument(
+                            metadata=v.metadata,
+                            text=slide_text.encode("utf-8"),
+                        )
+                        await flow("output").send(r)
 
-            # Send image descriptions
-            for idx, (img_info, description) in enumerate(zip(all_images, image_descriptions)):
-                if description and description.strip():
-                    image_text = f"{img_info['context']}\nDescription:\n{description}\n"
-                    logger.info(f"Sending image {idx+1}/{len(all_images)} description to RAG ({len(image_text)} chars)")
-                    logger.debug(f"Image description:\n{image_text[:300]}{'...' if len(image_text) > 300 else ''}")
-                    r = TextDocument(
-                        metadata=v.metadata,
-                        text=image_text.encode("utf-8"),
-                    )
-                    await flow("output").send(r)
+            # Process images with concurrent vLLM requests
+            if all_images:
+                logger.info(f"Processing {len(all_images)} unique images with concurrent vLLM requests")
+                image_descriptions = await self._describe_images_concurrent(all_images)
 
-        logger.info(f"PPTX extraction complete: {len(all_images)} images processed")
+                # Send image descriptions
+                for idx, (img_info, description) in enumerate(zip(all_images, image_descriptions)):
+                    if description and description.strip():
+                        image_text = f"{img_info['context']}\nDescription:\n{description}\n"
+                        logger.info(f"Sending image {idx+1}/{len(all_images)} description to RAG ({len(image_text)} chars)")
+                        logger.debug(f"Image description:\n{image_text[:300]}{'...' if len(image_text) > 300 else ''}")
+                        r = TextDocument(
+                            metadata=v.metadata,
+                            text=image_text.encode("utf-8"),
+                        )
+                        await flow("output").send(r)
+
+            logger.info(f"PPTX extraction complete: {len(all_images)} images processed")
+
+        except Exception as e:
+            doc_id = v.metadata.id if v and hasattr(v, 'metadata') else "unknown"
+            logger.error(f"Fatal error processing PPTX {doc_id}: {type(e).__name__}: {e}")
+            # Re-raise to trigger Pulsar redelivery for transient errors
+            raise
 
     # // ---> on_message > [_try_pptx_extraction] > extract using python-pptx with fallback
     def _try_pptx_extraction(
@@ -312,7 +327,11 @@ class Processor(FlowProcessor):
 
     # // ---> [_is_pptx] > check if blob is a PPTX file
     def _is_pptx(self, blob: bytes, content_type: Optional[str] = None) -> bool:
-        """Check if blob is a PPTX file by content_type or magic bytes."""
+        """
+        Check if blob is a PPTX file by content_type or by inspecting ZIP contents.
+        More accurate than just checking ZIP magic bytes (which would match DOCX/XLSX too).
+        """
+        # Check content_type first (most reliable when available)
         if content_type:
             ct_lower = content_type.strip().lower()
             if ct_lower in (
@@ -320,10 +339,30 @@ class Processor(FlowProcessor):
                 "application/vnd.ms-powerpoint"
             ):
                 return True
+            # Explicitly skip DOCX/XLSX content types
+            if "word" in ct_lower or "spreadsheet" in ct_lower or "excel" in ct_lower:
+                return False
 
-        # PPTX files are ZIP archives starting with PK
-        if len(blob) >= 4 and blob[:4] == b'PK\x03\x04':
-            return True
+        # Check ZIP magic bytes first
+        if len(blob) < 4 or blob[:4] != b'PK\x03\x04':
+            return False
+
+        # Inspect ZIP contents to distinguish PPTX from DOCX/XLSX
+        # PPTX has ppt/ directory, DOCX has word/, XLSX has xl/
+        try:
+            with zipfile.ZipFile(BytesIO(blob), 'r') as zf:
+                names = zf.namelist()
+                # Check for PPTX-specific paths
+                has_ppt = any(n.startswith('ppt/') for n in names)
+                has_content_types = '[Content_Types].xml' in names
+                # Exclude DOCX and XLSX
+                has_word = any(n.startswith('word/') for n in names)
+                has_xl = any(n.startswith('xl/') for n in names)
+
+                if has_ppt and has_content_types and not has_word and not has_xl:
+                    return True
+        except Exception:
+            pass
 
         return False
 
@@ -830,6 +869,7 @@ class Processor(FlowProcessor):
         """
         Describe images using concurrent vLLM requests.
         Processes up to MAX_CONCURRENT_VLLM_REQUESTS in parallel.
+        Uses asyncio.get_running_loop() for Python 3.10+ compatibility.
         """
         if not images:
             return []
@@ -841,7 +881,11 @@ class Processor(FlowProcessor):
 
         logger.info(f"Processing {len(valid_images)} images concurrently")
 
-        loop = asyncio.get_event_loop()
+        # Use get_running_loop() for Python 3.10+ compatibility
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_CONCURRENT_VLLM_REQUESTS) as executor:
             futures = [
@@ -850,7 +894,7 @@ class Processor(FlowProcessor):
             ]
             results = await asyncio.gather(*futures, return_exceptions=True)
 
-        # Process results
+        # Process results - maintain order matching input images
         descriptions = []
         for result in results:
             if isinstance(result, Exception):
@@ -861,54 +905,85 @@ class Processor(FlowProcessor):
 
         return descriptions
 
-    # // ---> [_describe_single_image] > single vLLM request
+    # // ---> [_describe_single_image] > single vLLM request with retry
     def _describe_single_image(self, image_path: str) -> str:
-        """Describe a single image using vLLM."""
-        try:
-            image_url = self._image_to_base64(image_path)
-            if not image_url:
-                return "Image could not be processed."
+        """
+        Describe a single image using vLLM with retry logic for transient failures.
+        Retries on connection errors, timeouts, and 5xx server errors.
+        """
+        image_url = self._image_to_base64(image_path)
+        if not image_url:
+            return "Image could not be processed."
 
-            payload = {
-                "model": self.vllm_model,
-                "messages": [{
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": (
-                                "Describe this image from a presentation slide in detail. "
-                                "Focus on: 1) Any text or labels visible, 2) Charts/graphs and their data, "
-                                "3) Diagrams and their relationships, 4) Key visual elements. "
-                                "Be concise but comprehensive."
-                            )
-                        },
-                        {"type": "image_url", "image_url": {"url": image_url}}
-                    ]
-                }]
-            }
+        payload = {
+            "model": self.vllm_model,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Describe this image from a presentation slide in detail. "
+                            "Focus on: 1) Any text or labels visible, 2) Charts/graphs and their data, "
+                            "3) Diagrams and their relationships, 4) Key visual elements. "
+                            "Be concise but comprehensive."
+                        )
+                    },
+                    {"type": "image_url", "image_url": {"url": image_url}}
+                ]
+            }]
+        }
 
-            resp = requests.post(self.vllm_api_url, json=payload, timeout=VLLM_TIMEOUT_SECONDS)
+        last_error = None
+        for attempt in range(VLLM_MAX_RETRIES):
+            try:
+                resp = requests.post(
+                    self.vllm_api_url,
+                    json=payload,
+                    timeout=VLLM_TIMEOUT_SECONDS
+                )
 
-            if resp.status_code != 200:
-                logger.error(f"vLLM HTTP {resp.status_code}")
-                return f"Description unavailable (HTTP {resp.status_code})"
+                # Success
+                if resp.status_code == 200:
+                    data = resp.json()
+                    choice = (data.get("choices") or [{}])[0]
+                    content = (choice.get("message") or {}).get("content", "")
 
-            data = resp.json()
-            choice = (data.get("choices") or [{}])[0]
-            content = (choice.get("message") or {}).get("content", "")
+                    if isinstance(content, str):
+                        return content.strip()
+                    if isinstance(content, list):
+                        return "\n".join(c.get("text", "") for c in content if c.get("type") == "text")
+                    return ""
 
-            if isinstance(content, str):
-                return content.strip()
-            if isinstance(content, list):
-                return "\n".join(c.get("text", "") for c in content if c.get("type") == "text")
-            return ""
+                # Client errors (4xx) - don't retry
+                if 400 <= resp.status_code < 500:
+                    logger.error(f"vLLM client error HTTP {resp.status_code}: {resp.text[:200]}")
+                    return f"Description unavailable (HTTP {resp.status_code})"
 
-        except requests.exceptions.Timeout:
-            return "Description unavailable (timeout)"
-        except Exception as e:
-            logger.error(f"vLLM error: {e}")
-            return "Description unavailable"
+                # Server errors (5xx) - retry
+                last_error = f"HTTP {resp.status_code}"
+                logger.warning(f"vLLM server error {resp.status_code}, attempt {attempt + 1}/{VLLM_MAX_RETRIES}")
+
+            except requests.exceptions.Timeout:
+                last_error = "timeout"
+                logger.warning(f"vLLM timeout, attempt {attempt + 1}/{VLLM_MAX_RETRIES}")
+
+            except requests.exceptions.ConnectionError as e:
+                last_error = f"connection error: {e}"
+                logger.warning(f"vLLM connection error, attempt {attempt + 1}/{VLLM_MAX_RETRIES}: {e}")
+
+            except Exception as e:
+                last_error = str(e)
+                logger.error(f"vLLM unexpected error: {type(e).__name__}: {e}")
+                # Don't retry on unexpected errors
+                break
+
+            # Wait before retry (except on last attempt)
+            if attempt < VLLM_MAX_RETRIES - 1:
+                time.sleep(VLLM_RETRY_DELAY_SECONDS * (attempt + 1))  # Exponential backoff
+
+        logger.error(f"vLLM failed after {VLLM_MAX_RETRIES} attempts: {last_error}")
+        return f"Description unavailable ({last_error})"
 
 
 def run():
