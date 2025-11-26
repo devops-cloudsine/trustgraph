@@ -30,3 +30,9 @@ try:
     from . image_decoder import *
 except ImportError as e:
     logger.warning(f"image_decoder not available: {e}")
+
+# Import xlsx_decoder (uses unstructured for XLS/XLSX parsing)
+try:
+    from . xlsx_decoder import *
+except ImportError as e:
+    logger.debug(f"xlsx_decoder not available: {e}")

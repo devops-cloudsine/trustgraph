@@ -33,8 +33,9 @@ RUN set -eux; \
 
 # Install document processing libraries
 # Spire.Doc for DOCX, python-pptx for PPTX (free, open-source)
+# unstructured for XLS/XLSX parsing
 RUN python -m pip install --no-cache-dir --upgrade pip && \
-    python -m pip install --no-cache-dir python-docx python-pptx Pillow
+    python -m pip install --no-cache-dir python-docx python-pptx Pillow "unstructured[xlsx]"
 
 # Provide a fallback copy of the sources in case the container is
 # started without bind-mounting the repository.

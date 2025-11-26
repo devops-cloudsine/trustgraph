@@ -34,6 +34,7 @@ pdf-ocr = "trustgraph.decoding.ocr.pdf_decoder:run"
 docx-ocr = "trustgraph.decoding.ocr.docx_decoder:run"
 pptx-ocr = "trustgraph.decoding.ocr.pptx_decoder:run"
 image-ocr = "trustgraph.decoding.ocr.image_decoder:run"
+xlsx-ocr = "trustgraph.decoding.ocr.xlsx_decoder:run"
 
 [tool.setuptools.packages.find]
 include = ["trustgraph*"]
