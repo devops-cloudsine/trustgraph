@@ -43,6 +43,11 @@ from .content_type_detection import IMAGE_KIND_TO_CONTENT_TYPE
 # These should be skipped by unstructured-decoder to avoid duplicate processing
 DOCX_OCR_HANDLED_TYPES = {DOCX_CONTENT_TYPE, DOC_CONTENT_TYPE}
 
+# PPTX content types handled by the dedicated pptx-decoder (OCR container)
+PPTX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+PPT_CONTENT_TYPE = "application/vnd.ms-powerpoint"
+PPTX_OCR_HANDLED_TYPES = {PPTX_CONTENT_TYPE, PPT_CONTENT_TYPE}
+
 # Image content types handled by the dedicated image-decoder (vLLM container)
 # These should be skipped by unstructured-decoder to avoid duplicate processing
 IMAGE_OCR_HANDLED_TYPES = set(IMAGE_KIND_TO_CONTENT_TYPE.values())
@@ -131,6 +136,15 @@ class Processor(FlowProcessor):
         if content_type in DOCX_OCR_HANDLED_TYPES:
             logger.info(
                 "Skipping %s (content_type=%s) - handled by docx-decoder",
+                document.metadata.id,
+                content_type,
+            )
+            return
+
+        # // ---> Skip PPTX/PPT files - they are handled by the dedicated pptx-decoder (OCR container)
+        if content_type in PPTX_OCR_HANDLED_TYPES:
+            logger.info(
+                "Skipping %s (content_type=%s) - handled by pptx-decoder",
                 document.metadata.id,
                 content_type,
             )

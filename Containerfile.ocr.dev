@@ -34,7 +34,7 @@ RUN set -eux; \
 # Install document processing libraries
 # Spire.Doc for DOCX, python-pptx for PPTX (free, open-source)
 RUN python -m pip install --no-cache-dir --upgrade pip && \
-    python -m pip install --no-cache-dir Spire.Doc python-pptx Pillow
+    python -m pip install --no-cache-dir python-docx python-pptx Pillow
 
 # Provide a fallback copy of the sources in case the container is
 # started without bind-mounting the repository.
