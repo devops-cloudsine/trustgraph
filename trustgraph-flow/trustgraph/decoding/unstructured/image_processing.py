@@ -1,10 +1,19 @@
 """
 Image-specific helpers: content-type guard and OCR.
+
+DEPRECATED: The OCR-based image processing is deprecated in favor of using
+the dedicated image-decoder service which uses vLLM vision models for 
+image descriptions. The unstructured-decoder now skips image files so 
+they are processed by image-decoder instead.
+
+These functions are kept for backwards compatibility but should not be 
+used in new code.
 """
 
 from __future__ import annotations
 
 import logging
+import warnings
 from io import BytesIO
 from typing import List, Optional
 
@@ -15,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 # // ---> Processor._is_image_content_type > [is_image_content_type] > guards OCR branch
 def is_image_content_type(content_type: Optional[str]) -> bool:
+    """Check if the content type is an image type."""
     if not content_type:
         return False
     lowered = content_type.strip().lower()
@@ -22,11 +32,21 @@ def is_image_content_type(content_type: Optional[str]) -> bool:
 
 
 # // ---> Processor._ocr_image > [ocr_image] > returns textual segments from OCR
+# DEPRECATED: Use image-decoder service with vLLM instead
 def ocr_image(blob: bytes) -> List[str]:
     """
+    DEPRECATED: This function uses pytesseract OCR which has been replaced
+    by the image-decoder service that uses vLLM vision models.
+    
     Perform OCR on an image blob using pytesseract if available.
     Falls back to empty list if library or system dependency is missing.
     """
+    warnings.warn(
+        "ocr_image() is deprecated. Use image-decoder service with vLLM instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    
     try:
         from PIL import Image  # type: ignore
         import pytesseract  # type: ignore

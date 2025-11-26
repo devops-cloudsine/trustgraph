@@ -37,10 +37,15 @@ from .office_image_extraction import (
     DOCX_CONTENT_TYPE,
     DOC_CONTENT_TYPE,
 )
+from .content_type_detection import IMAGE_KIND_TO_CONTENT_TYPE
 
 # Content types handled by the dedicated docx-decoder (OCR container)
 # These should be skipped by unstructured-decoder to avoid duplicate processing
 DOCX_OCR_HANDLED_TYPES = {DOCX_CONTENT_TYPE, DOC_CONTENT_TYPE}
+
+# Image content types handled by the dedicated image-decoder (vLLM container)
+# These should be skipped by unstructured-decoder to avoid duplicate processing
+IMAGE_OCR_HANDLED_TYPES = set(IMAGE_KIND_TO_CONTENT_TYPE.values())
 
 try:
     from unstructured.partition.auto import partition
@@ -126,6 +131,15 @@ class Processor(FlowProcessor):
         if content_type in DOCX_OCR_HANDLED_TYPES:
             logger.info(
                 "Skipping %s (content_type=%s) - handled by docx-decoder",
+                document.metadata.id,
+                content_type,
+            )
+            return
+
+        # // ---> Skip image files - they are handled by the dedicated image-decoder (vLLM container)
+        if content_type in IMAGE_OCR_HANDLED_TYPES:
+            logger.info(
+                "Skipping %s (content_type=%s) - handled by image-decoder",
                 document.metadata.id,
                 content_type,
             )
