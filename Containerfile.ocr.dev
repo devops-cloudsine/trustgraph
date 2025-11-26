@@ -31,10 +31,10 @@ RUN set -eux; \
         exit 1; \
     fi
 
-# Install Spire libraries needed by document decoders
-# Spire.Doc for DOCX, Spire.Presentation for PPTX
+# Install document processing libraries
+# Spire.Doc for DOCX, python-pptx for PPTX (free, open-source)
 RUN python -m pip install --no-cache-dir --upgrade pip && \
-    python -m pip install --no-cache-dir Spire.Doc Spire.Presentation
+    python -m pip install --no-cache-dir Spire.Doc python-pptx Pillow
 
 # Provide a fallback copy of the sources in case the container is
 # started without bind-mounting the repository.

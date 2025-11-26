@@ -1,20 +1,32 @@
 """
-PPTX decoder: Extracts text, tables, and images from PPTX presentations using Spire.Presentation.
+PPTX decoder: Extracts text, tables, and images from PPTX presentations using python-pptx.
 Images are sent to vLLM for description. All content is output as structured text segments
 suitable for RAG processing.
+
+Key features:
+- Uses python-pptx (free, open-source, no license required)
+- Fallback to zipfile extraction when python-pptx fails (handles corrupt files)
+- Concurrent vLLM requests for faster image processing
+- Image deduplication by MD5 hash to avoid redundant LLM calls
+- Robust error handling that continues processing even if parts fail
+- Extracts text, tables, speaker notes, and images
+
+Reference: https://python-pptx.readthedocs.io/en/latest/api/presentation.html
 """
 
+import asyncio
 import base64
+import concurrent.futures
+import hashlib
 import logging
 import os
 import re
+import zipfile
+from io import BytesIO
 from pathlib import Path
 import requests
 import json
-from typing import Dict, List, Any, Optional
-
-from spire.presentation.common import *
-from spire.presentation import Presentation, IShape
+from typing import Dict, List, Any, Optional, Set, Tuple
 
 from ... schema import Document as TGDocument, TextDocument
 from ... base import FlowProcessor, ConsumerSpec, ProducerSpec
@@ -22,17 +34,42 @@ from ... base import FlowProcessor, ConsumerSpec, ProducerSpec
 # Module logger
 logger = logging.getLogger(__name__)
 
+# Try to import python-pptx
+try:
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+    from pptx.shapes.picture import Picture
+    from pptx.shapes.graphfrm import GraphicFrame
+    from pptx.table import Table
+    PPTX_AVAILABLE = True
+except ImportError as e:
+    PPTX_AVAILABLE = False
+    Presentation = None
+    logger.warning(f"python-pptx not available: {e}")
+
+# Try to import PIL for image handling
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+
 # Enable DEBUG level for this module when VLLM_LOGGING_LEVEL=DEBUG is set
 if os.environ.get("VLLM_LOGGING_LEVEL", "").upper() == "DEBUG":
     logger.setLevel(logging.DEBUG)
 
 default_ident = "pptx-decoder"
 
+# Performance tuning constants
+MAX_CONCURRENT_VLLM_REQUESTS = 4  # Max parallel vLLM requests
+VLLM_TIMEOUT_SECONDS = 180  # Timeout for vLLM requests
+MAX_IMAGE_SIZE_MB = 10  # Skip images larger than this
+
 
 class Processor(FlowProcessor):
 
     def __init__(self, **params):
-
         id = params.get("id", default_ident)
         self.vllm_api_url = params.get(
             "vllm_api_url",
@@ -48,52 +85,48 @@ class Processor(FlowProcessor):
         )
 
         super(Processor, self).__init__(
-            **params | {
-                "id": id,
-            }
+            **params | {"id": id}
         )
 
         self.register_specification(
             ConsumerSpec(
-                name = "input",
-                schema = TGDocument,
-                handler = self.on_message,
+                name="input",
+                schema=TGDocument,
+                handler=self.on_message,
             )
         )
 
         self.register_specification(
             ProducerSpec(
-                name = "output",
-                schema = TextDocument,
+                name="output",
+                schema=TextDocument,
             )
         )
 
-        logger.info("PPTX extraction + vLLM description processor initialized (using Spire.Presentation)")
+        logger.info("PPTX decoder initialized (python-pptx + zipfile fallback, concurrent vLLM)")
 
     # // ---> Pulsar consumer(input) > [on_message] > extract slides/text/images, vLLM describe -> flow('output')
     async def on_message(self, msg, consumer, flow):
-
         logger.info("PPTX message received for extraction")
 
         v = msg.value()
-
         logger.info(f"Processing {v.metadata.id}...")
 
         blob = base64.b64decode(v.data)
 
-        # Check if this is a PPTX file (content_type or magic bytes)
+        # Check if this is a PPTX file
         content_type = getattr(v, "content_type", None)
         if not self._is_pptx(blob, content_type):
             logger.info(f"Skipping non-PPTX file: {v.metadata.id} (content_type: {content_type})")
             return
 
-        # Prepare output directories for this document
+        # Prepare output directories
         doc_dir = os.path.join(self.files_base_dir, self._safe_id(v.metadata.id))
         os.makedirs(doc_dir, exist_ok=True)
         images_dir = os.path.join(doc_dir, "images")
         os.makedirs(images_dir, exist_ok=True)
 
-        # Write blob to a file for Spire.Presentation to load
+        # Save PPTX to file
         temp_pptx_path = os.path.join(doc_dir, "source.pptx")
         try:
             with open(temp_pptx_path, "wb") as f:
@@ -101,460 +134,782 @@ class Processor(FlowProcessor):
             logger.debug(f"Saved PPTX to file: {temp_pptx_path}")
         except Exception as e:
             logger.error(f"Failed to save PPTX to file: {e}")
+            # Try in-memory fallback
+            await self._process_with_fallback(blob, images_dir, v, flow)
             return
 
-        # Load PPTX using Spire.Presentation
-        try:
-            ppt = Presentation()
-            ppt.LoadFromFile(temp_pptx_path)
-        except Exception as e:
-            logger.error(f"Failed to load PPTX document with Spire.Presentation: {e}")
-            return
+        # Track processed image hashes for deduplication
+        processed_hashes: Set[str] = set()
+        all_images: List[Dict[str, Any]] = []
+        structured_data = None
+        pptx_success = False
 
-        # Extract structured data from presentation
-        structured_data = self._extract_structured_pptx(ppt, images_dir)
-        
-        logger.info(f"Extracted {structured_data['presentation']['total_slides']} slides from PPTX")
+        # Try python-pptx extraction
+        if PPTX_AVAILABLE:
+            pptx_success, structured_data, all_images = self._try_pptx_extraction(
+                temp_pptx_path, blob, images_dir, processed_hashes
+            )
 
-        # Process each slide and send structured output
-        for slide_data in structured_data["presentation"]["slides"]:
-            slide_number = slide_data["slide_number"]
-            
-            # Build structured text output for this slide
-            slide_text_parts = []
-            
-            # Header with slide info
-            slide_text_parts.append(f"{'='*60}")
-            slide_text_parts.append(f"SLIDE {slide_number}")
-            if slide_data.get("layout"):
-                slide_text_parts.append(f"Layout: {slide_data['layout']}")
-            slide_text_parts.append(f"{'='*60}\n")
-            
-            # Add text content
-            if slide_data["text_content"]:
-                slide_text_parts.append("## Text Content:")
-                for text_item in slide_data["text_content"]:
-                    slide_text_parts.append(f"\n{text_item['text']}")
-                slide_text_parts.append("")
-            
-            # Add tables as structured text
-            if slide_data["tables"]:
-                slide_text_parts.append("## Tables:")
-                for table_idx, table in enumerate(slide_data["tables"]):
-                    slide_text_parts.append(f"\nTable {table_idx + 1} ({table['rows']} rows × {table['columns']} columns):")
-                    for row in table["data"]:
-                        slide_text_parts.append(" | ".join(str(cell) if cell else "" for cell in row))
-                slide_text_parts.append("")
-            
-            # Add shape summary
-            if slide_data["shapes"]:
-                slide_text_parts.append(f"## Shape Summary: {len(slide_data['shapes'])} shapes")
-                for shape in slide_data["shapes"]:
-                    shape_info = f"  - Shape {shape['shape_index']}: {shape['shape_type']}"
-                    if shape.get("name"):
-                        shape_info += f" (Name: {shape['name']})"
-                    if shape.get("text"):
-                        preview = shape["text"][:50] + "..." if len(shape["text"]) > 50 else shape["text"]
-                        shape_info += f" - Text: {preview}"
-                    slide_text_parts.append(shape_info)
-                slide_text_parts.append("")
-            
-            # Send slide text content
-            slide_text = "\n".join(slide_text_parts)
-            if slide_text.strip():
+        # Fallback to zipfile extraction if python-pptx failed
+        if not pptx_success:
+            logger.info("Using zipfile fallback extraction")
+            fallback_images = self._extract_images_from_zip(blob, images_dir, processed_hashes)
+            for ix, (image_path, original_name) in enumerate(fallback_images):
+                all_images.append({
+                    "path": image_path,
+                    "context": f"Image {ix + 1} ({original_name})",
+                    "slide_number": None,
+                    "shape_index": None
+                })
+            structured_data = {
+                "presentation": {
+                    "total_slides": 0,
+                    "slides": [],
+                    "note": "Extracted via zipfile fallback"
+                }
+            }
+            logger.info(f"Fallback: Found {len(fallback_images)} images")
+
+        # Send presentation header first
+        if structured_data:
+            # Get filename from metadata or path
+            filename = getattr(v.metadata, 'id', 'presentation') + '.pptx'
+            header = self._format_presentation_header(structured_data, filename)
+            if header.strip():
+                logger.info(f"Sending presentation header to RAG ({len(header)} chars)")
+                logger.debug(f"Header content:\n{header[:500]}{'...' if len(header) > 500 else ''}")
                 r = TextDocument(
                     metadata=v.metadata,
-                    text=slide_text.encode("utf-8"),
+                    text=header.encode("utf-8"),
                 )
                 await flow("output").send(r)
-            
-            # Process and describe images for this slide
-            for img_info in slide_data["images"]:
-                image_path = img_info["path"]
-                
-                if os.path.exists(image_path):
-                    # Describe image via vLLM
-                    description = self._describe_image_with_vllm(image_path)
-                    image_text = (
-                        f"Slide {slide_number} - Image: {img_info['filename']}\n"
-                        f"Shape Index: {img_info['shape_index']}\n"
-                        f"Description:\n{description}\n"
+
+        # Send text content from each slide
+        if structured_data and structured_data["presentation"]["slides"]:
+            for slide_data in structured_data["presentation"]["slides"]:
+                slide_text = self._format_slide_text(slide_data)
+                if slide_text.strip():
+                    slide_num = slide_data.get("slide_number", "?")
+                    logger.info(f"Sending slide {slide_num} content to RAG ({len(slide_text)} chars)")
+                    logger.debug(f"Slide {slide_num} content:\n{slide_text[:500]}{'...' if len(slide_text) > 500 else ''}")
+                    r = TextDocument(
+                        metadata=v.metadata,
+                        text=slide_text.encode("utf-8"),
                     )
-                    
+                    await flow("output").send(r)
+
+        # Process images with concurrent vLLM requests
+        if all_images:
+            logger.info(f"Processing {len(all_images)} unique images with concurrent vLLM requests")
+            image_descriptions = await self._describe_images_concurrent(all_images)
+
+            # Send image descriptions
+            for idx, (img_info, description) in enumerate(zip(all_images, image_descriptions)):
+                if description and description.strip():
+                    image_text = f"{img_info['context']}\nDescription:\n{description}\n"
+                    logger.info(f"Sending image {idx+1}/{len(all_images)} description to RAG ({len(image_text)} chars)")
+                    logger.debug(f"Image description:\n{image_text[:300]}{'...' if len(image_text) > 300 else ''}")
                     r = TextDocument(
                         metadata=v.metadata,
                         text=image_text.encode("utf-8"),
                     )
                     await flow("output").send(r)
-        
-        # Also process global images (fallback extraction)
-        global_images = self._extract_global_images(ppt, images_dir)
-        for ix, image_path in enumerate(global_images):
-            if os.path.exists(image_path):
-                description = self._describe_image_with_vllm(image_path)
-                image_text = (
-                    f"Global Image {ix + 1}\n"
-                    f"Description:\n{description}\n"
-                )
-                
-                r = TextDocument(
-                    metadata=v.metadata,
-                    text=image_text.encode("utf-8"),
-                )
-                await flow("output").send(r)
 
-        # Dispose presentation
+        logger.info(f"PPTX extraction complete: {len(all_images)} images processed")
+
+    # // ---> on_message > [_try_pptx_extraction] > extract using python-pptx with fallback
+    def _try_pptx_extraction(
+        self, pptx_path: str, blob: bytes, images_dir: str, processed_hashes: Set[str]
+    ) -> Tuple[bool, Optional[Dict], List[Dict]]:
+        """
+        Try to extract content using python-pptx.
+        Falls back to zipfile if python-pptx fails completely.
+        """
+        all_images = []
+        structured_data = None
+
         try:
-            ppt.Dispose()
-        except Exception as e:
-            logger.warning(f"Failed to dispose Spire.Presentation: {e}")
+            # Try loading from file first
+            logger.debug("Trying python-pptx load from file")
+            prs = Presentation(pptx_path)
+            logger.info(f"python-pptx loaded successfully: {len(prs.slides)} slides")
 
-        logger.info("PPTX extraction and image descriptions complete")
+            # Extract all content
+            structured_data = self._extract_structured_pptx(prs, images_dir, processed_hashes)
+            logger.info(f"Extracted {structured_data['presentation']['total_slides']} slides")
+
+            # Collect slide images
+            for slide_data in structured_data["presentation"]["slides"]:
+                for img_info in slide_data.get("images", []):
+                    all_images.append({
+                        "path": img_info["path"],
+                        "context": f"Slide {slide_data['slide_number']} - {img_info['filename']}",
+                        "slide_number": slide_data["slide_number"],
+                        "shape_index": img_info.get("shape_index")
+                    })
+
+            return True, structured_data, all_images
+
+        except Exception as e:
+            logger.warning(f"python-pptx file load failed: {e}")
+
+            # Try loading from bytes (in-memory)
+            try:
+                logger.debug("Trying python-pptx load from bytes")
+                prs = Presentation(BytesIO(blob))
+                logger.info(f"python-pptx loaded from bytes: {len(prs.slides)} slides")
+
+                structured_data = self._extract_structured_pptx(prs, images_dir, processed_hashes)
+
+                for slide_data in structured_data["presentation"]["slides"]:
+                    for img_info in slide_data.get("images", []):
+                        all_images.append({
+                            "path": img_info["path"],
+                            "context": f"Slide {slide_data['slide_number']} - {img_info['filename']}",
+                            "slide_number": slide_data["slide_number"],
+                            "shape_index": img_info.get("shape_index")
+                        })
+
+                return True, structured_data, all_images
+
+            except Exception as e2:
+                logger.warning(f"python-pptx bytes load also failed: {e2}")
+                return False, None, []
+
+    # // ---> on_message > [_process_with_fallback] > handle fallback when file save fails
+    async def _process_with_fallback(self, blob: bytes, images_dir: str, v, flow):
+        """Fallback processing when file operations fail."""
+        processed_hashes: Set[str] = set()
+        images = self._extract_images_from_zip(blob, images_dir, processed_hashes)
+
+        if images:
+            logger.info(f"Fallback: Extracted {len(images)} images")
+            all_images = [
+                {"path": p, "context": f"Image {i+1} ({name})", "slide_number": None, "shape_index": None}
+                for i, (p, name) in enumerate(images)
+            ]
+            descriptions = await self._describe_images_concurrent(all_images)
+
+            for img_info, desc in zip(all_images, descriptions):
+                if desc:
+                    r = TextDocument(
+                        metadata=v.metadata,
+                        text=f"{img_info['context']}\nDescription:\n{desc}\n".encode("utf-8")
+                    )
+                    await flow("output").send(r)
+        else:
+            logger.warning("Fallback extraction found no images")
 
     @staticmethod
     def add_args(parser):
         FlowProcessor.add_args(parser)
 
-    # // ---> on_message > [_safe_id] > sanitize directory name
+    # // ---> [_safe_id] > sanitize directory name
     def _safe_id(self, value: str) -> str:
         if value is None:
             return "unknown"
         return re.sub(r"[^A-Za-z0-9._-]+", "_", str(value))
 
-    # // ---> on_message > [_is_pptx] > check if blob is a PPTX file
+    # // ---> [_is_pptx] > check if blob is a PPTX file
     def _is_pptx(self, blob: bytes, content_type: Optional[str] = None) -> bool:
-        """
-        Check if the blob is a PPTX file by examining content_type and/or magic bytes.
-        PPTX files are ZIP-based Office Open XML files (magic bytes: PK).
-        """
-        # Check content_type first if available
+        """Check if blob is a PPTX file by content_type or magic bytes."""
         if content_type:
             ct_lower = content_type.strip().lower()
-            if ct_lower == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+            if ct_lower in (
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                "application/vnd.ms-powerpoint"
+            ):
                 return True
-            # Also handle legacy PPT if we want to try loading it
-            if ct_lower == "application/vnd.ms-powerpoint":
-                # Legacy PPT - might work with Spire, let's try
-                return True
 
-        # Fall back to checking magic bytes
-        # PPTX/DOCX/XLSX are all ZIP files starting with "PK" (0x50 0x4B)
-        if len(blob) < 4:
-            return False
-
-        # ZIP magic bytes check
-        if blob[:2] != b'PK':
-            return False
-
-        # Additional validation: check for Office Open XML signature
-        # ZIP files have "PK\x03\x04" as local file header signature
-        if blob[:4] == b'PK\x03\x04':
-            # This is a valid ZIP file - could be PPTX, DOCX, or XLSX
-            # For now, accept any ZIP file and let Spire.Presentation validate
-            # A more thorough check would unzip and look for [Content_Types].xml
+        # PPTX files are ZIP archives starting with PK
+        if len(blob) >= 4 and blob[:4] == b'PK\x03\x04':
             return True
 
         return False
 
-    # // ---> on_message > [_extract_structured_pptx] > parse PPTX and build structured data dict
-    def _extract_structured_pptx(self, ppt: Presentation, images_dir: str) -> Dict[str, Any]:
+    # // ---> [_compute_image_hash] > MD5 hash for deduplication
+    def _compute_image_hash(self, image_data: bytes) -> str:
+        return hashlib.md5(image_data).hexdigest()
+
+    # // ---> [_extract_images_from_zip] > fallback extraction via zipfile
+    def _extract_images_from_zip(
+        self, blob: bytes, images_dir: str, processed_hashes: Set[str]
+    ) -> List[Tuple[str, str]]:
         """
-        Extract structured data from PPTX file including slides, text, images, and shapes.
-        Returns a dictionary with hierarchical structure suitable for LLM/RAG processing.
+        Extract images directly from PPTX ZIP archive.
+        Returns list of (saved_path, original_name) tuples.
+        Works even when python-pptx can't parse the file.
         """
+        saved = []
+        image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp'}
+        # EMF/WMF are Windows metafiles - we'll try to handle them
+        metafile_extensions = {'.emf', '.wmf'}
+
+        try:
+            with zipfile.ZipFile(BytesIO(blob), 'r') as zf:
+                for name in zf.namelist():
+                    # PPTX stores media in ppt/media/
+                    if 'media/' not in name.lower():
+                        continue
+
+                    ext = Path(name).suffix.lower()
+                    original_name = Path(name).name
+
+                    if ext in image_extensions or ext in metafile_extensions:
+                        try:
+                            image_data = zf.read(name)
+
+                            # Skip very large images
+                            if len(image_data) > MAX_IMAGE_SIZE_MB * 1024 * 1024:
+                                logger.debug(f"Skipping large image: {name}")
+                                continue
+
+                            img_hash = self._compute_image_hash(image_data)
+                            if img_hash in processed_hashes:
+                                continue
+                            processed_hashes.add(img_hash)
+
+                            # Try to convert EMF/WMF if PIL is available
+                            if ext in metafile_extensions and PIL_AVAILABLE:
+                                converted = self._try_convert_metafile(image_data)
+                                if converted:
+                                    image_data = converted
+                                    ext = '.png'
+                                else:
+                                    # Skip unconvertible metafiles
+                                    logger.debug(f"Skipping unconvertible metafile: {name}")
+                                    continue
+
+                            filename = f"zip_{len(saved)}{ext}"
+                            path = os.path.join(images_dir, filename)
+                            with open(path, 'wb') as f:
+                                f.write(image_data)
+                            saved.append((path, original_name))
+                            logger.debug(f"Extracted from ZIP: {original_name}")
+
+                        except Exception as e:
+                            logger.debug(f"Failed to extract {name}: {e}")
+
+        except zipfile.BadZipFile:
+            logger.warning("Not a valid ZIP archive")
+        except Exception as e:
+            logger.warning(f"ZIP extraction failed: {e}")
+
+        return saved
+
+    # // ---> [_try_convert_metafile] > convert EMF/WMF to PNG
+    def _try_convert_metafile(self, data: bytes) -> Optional[bytes]:
+        """Try to convert EMF/WMF metafile to PNG using PIL."""
+        if not PIL_AVAILABLE:
+            return None
+        try:
+            img = Image.open(BytesIO(data))
+            output = BytesIO()
+            img.save(output, format='PNG')
+            return output.getvalue()
+        except Exception:
+            return None
+
+    # // ---> [_extract_structured_pptx] > parse PPTX with python-pptx
+    def _extract_structured_pptx(
+        self, prs, images_dir: str, processed_hashes: Set[str]
+    ) -> Dict[str, Any]:
+        """Extract all content from PPTX using python-pptx."""
         structured_data = {
             "presentation": {
-                "total_slides": ppt.Slides.Count,
-                "slides": []
+                "total_slides": len(prs.slides),
+                "slides": [],
+                "properties": {}
             }
         }
 
-        # Global image counter for unique naming
-        global_image_counter = 0
-
-        # Iterate through all slides
-        for slide_idx in range(ppt.Slides.Count):
-            slide = ppt.Slides[slide_idx]
-
-            slide_data = {
-                "slide_number": slide_idx + 1,
-                "slide_id": slide.SlideID if hasattr(slide, "SlideID") else None,
-                "layout": slide.Layout.Name if hasattr(slide, "Layout") and hasattr(slide.Layout, "Name") else None,
-                "shapes": [],
-                "text_content": [],
-                "images": [],
-                "tables": []
+        # Extract core properties
+        try:
+            props = prs.core_properties
+            structured_data["presentation"]["properties"] = {
+                "title": props.title or "",
+                "author": props.author or "",
+                "subject": props.subject or "",
+                "keywords": props.keywords or "",
+                "comments": props.comments or "",
             }
+        except Exception as e:
+            logger.debug(f"Failed to extract core properties: {e}")
 
-            # Iterate through shapes on the slide
-            for shape_idx in range(slide.Shapes.Count):
-                shape = slide.Shapes[shape_idx]
+        image_counter = 0
 
-                shape_data = {
-                    "shape_index": shape_idx,
-                    "shape_type": str(shape.ShapeType) if hasattr(shape, "ShapeType") else "Unknown",
-                    "name": shape.Name if hasattr(shape, "Name") else None,
-                    "left": float(shape.Left) if hasattr(shape, "Left") else None,
-                    "top": float(shape.Top) if hasattr(shape, "Top") else None,
-                    "width": float(shape.Width) if hasattr(shape, "Width") else None,
-                    "height": float(shape.Height) if hasattr(shape, "Height") else None,
-                    "text": None,
-                    "image_reference": None,
-                    "table_data": None
-                }
-
-                # Extract text from shapes with TextFrame
-                if hasattr(shape, "TextFrame") and shape.TextFrame is not None:
-                    try:
-                        text_content = shape.TextFrame.Text
-                        if text_content and text_content.strip():
-                            shape_data["text"] = text_content.strip()
-                            slide_data["text_content"].append({
-                                "shape_index": shape_idx,
-                                "text": text_content.strip()
-                            })
-                    except Exception as e:
-                        logger.debug(f"Failed to extract text from shape {shape_idx}: {e}")
-
-                # Extract images - check for PictureFill property
-                global_image_counter = self._try_extract_shape_image(
-                    shape, shape_data, slide_data, images_dir,
-                    slide_idx, global_image_counter
+        # Process each slide
+        for slide_idx, slide in enumerate(prs.slides):
+            try:
+                slide_data = self._extract_slide_data(
+                    slide, slide_idx, images_dir, processed_hashes, image_counter
                 )
-
-                # Extract tables - check for Table property
-                self._try_extract_table(shape, shape_data, slide_data, shape_idx)
-
-                slide_data["shapes"].append(shape_data)
-
-            structured_data["presentation"]["slides"].append(slide_data)
+                image_counter += len(slide_data.get("images", []))
+                structured_data["presentation"]["slides"].append(slide_data)
+            except Exception as e:
+                logger.warning(f"Failed to process slide {slide_idx + 1}: {e}")
+                structured_data["presentation"]["slides"].append({
+                    "slide_number": slide_idx + 1,
+                    "error": str(e),
+                    "shapes": [], "text_content": [], "images": [], "tables": []
+                })
 
         return structured_data
 
-    # // ---> _extract_structured_pptx > [_try_extract_shape_image] > extract image from shape if present
-    def _try_extract_shape_image(
-        self, shape, shape_data: Dict, slide_data: Dict,
-        images_dir: str, slide_idx: int, global_image_counter: int
-    ) -> int:
-        """
-        Try to extract an image from a shape using multiple methods.
-        Returns updated global_image_counter.
-        """
-        try:
-            if hasattr(shape, "PictureFill") and shape.PictureFill is not None:
-                if hasattr(shape.PictureFill, "Picture") and shape.PictureFill.Picture is not None:
-                    image = shape.PictureFill.Picture.EmbedImage
-                    if image is not None:
-                        image_filename = f"slide_{slide_idx + 1}_image_{global_image_counter}.png"
-                        image_path = os.path.join(images_dir, image_filename)
-                        image.Image.Save(image_path)
+    # // ---> [_extract_slide_data] > extract all content from a single slide
+    def _extract_slide_data(
+        self, slide, slide_idx: int, images_dir: str,
+        processed_hashes: Set[str], image_counter: int
+    ) -> Dict[str, Any]:
+        """Extract all content from a single slide."""
+        slide_data = {
+            "slide_number": slide_idx + 1,
+            "slide_id": None,
+            "layout": None,
+            "shapes": [],
+            "text_content": [],
+            "images": [],
+            "tables": [],
+            "notes": None
+        }
 
-                        shape_data["image_reference"] = image_filename
-                        slide_data["images"].append({
-                            "shape_index": shape_data["shape_index"],
-                            "filename": image_filename,
-                            "path": image_path
-                        })
-                        global_image_counter += 1
-                        logger.debug(f"Extracted image via PictureFill: {image_filename}")
-                        return global_image_counter
+        # Get slide layout name
+        try:
+            if slide.slide_layout:
+                slide_data["layout"] = slide.slide_layout.name
+        except Exception:
+            pass
+
+        # Extract speaker notes
+        try:
+            if slide.has_notes_slide and slide.notes_slide:
+                notes_frame = slide.notes_slide.notes_text_frame
+                if notes_frame and notes_frame.text:
+                    slide_data["notes"] = notes_frame.text.strip()
         except Exception as e:
-            logger.debug(f"PictureFill extraction failed: {e}")
+            logger.debug(f"Notes extraction failed: {e}")
 
-        # Try alternative method: check Fill.Picture
+        # Process all shapes
+        local_img_counter = 0
+        for shape_idx, shape in enumerate(slide.shapes):
+            try:
+                shape_data, new_images = self._extract_shape_data(
+                    shape, shape_idx, slide_idx, images_dir,
+                    processed_hashes, image_counter + local_img_counter
+                )
+                slide_data["shapes"].append(shape_data)
+
+                # Add text content
+                if shape_data.get("text"):
+                    slide_data["text_content"].append({
+                        "shape_index": shape_idx,
+                        "shape_name": shape_data.get("name"),
+                        "text": shape_data["text"]
+                    })
+
+                # Add images
+                for img in new_images:
+                    slide_data["images"].append(img)
+                    local_img_counter += 1
+
+                # Add table
+                if shape_data.get("table_data"):
+                    slide_data["tables"].append({
+                        "shape_index": shape_idx,
+                        "rows": len(shape_data["table_data"]),
+                        "columns": len(shape_data["table_data"][0]) if shape_data["table_data"] else 0,
+                        "data": shape_data["table_data"]
+                    })
+
+            except Exception as e:
+                logger.debug(f"Shape {shape_idx} extraction failed: {e}")
+
+        return slide_data
+
+    # // ---> [_extract_shape_data] > extract content from a single shape
+    def _extract_shape_data(
+        self, shape, shape_idx: int, slide_idx: int, images_dir: str,
+        processed_hashes: Set[str], image_counter: int
+    ) -> Tuple[Dict[str, Any], List[Dict]]:
+        """Extract all content from a shape. Returns (shape_data, list of images)."""
+        shape_data = {
+            "shape_index": shape_idx,
+            "shape_type": None,
+            "name": None,
+            "text": None,
+            "table_data": None,
+            "image_ref": None  # Will be set if shape contains an image
+        }
+        images = []
+
+        # Get shape name and type
         try:
-            if hasattr(shape, "Fill") and shape.Fill is not None:
-                if hasattr(shape.Fill, "Picture") and shape.Fill.Picture is not None:
-                    if hasattr(shape.Fill.Picture, "EmbedImage") and shape.Fill.Picture.EmbedImage is not None:
-                        image = shape.Fill.Picture.EmbedImage
-                        image_filename = f"slide_{slide_idx + 1}_image_{global_image_counter}.png"
-                        image_path = os.path.join(images_dir, image_filename)
-                        image.Image.Save(image_path)
+            shape_data["name"] = shape.name
+        except Exception:
+            pass
 
-                        shape_data["image_reference"] = image_filename
-                        slide_data["images"].append({
-                            "shape_index": shape_data["shape_index"],
-                            "filename": image_filename,
-                            "path": image_path
-                        })
-                        global_image_counter += 1
-                        logger.debug(f"Extracted image via Fill.Picture: {image_filename}")
+        try:
+            shape_data["shape_type"] = str(shape.shape_type)
+        except Exception:
+            pass
+
+        # Extract text from text frame
+        try:
+            if shape.has_text_frame:
+                text_parts = []
+                for paragraph in shape.text_frame.paragraphs:
+                    para_text = paragraph.text.strip()
+                    if para_text:
+                        text_parts.append(para_text)
+                if text_parts:
+                    shape_data["text"] = "\n".join(text_parts)
         except Exception as e:
-            logger.debug(f"Fill.Picture extraction failed: {e}")
+            logger.debug(f"Text extraction failed for shape {shape_idx}: {e}")
 
-        return global_image_counter
-
-    # // ---> _extract_structured_pptx > [_try_extract_table] > extract table data from shape if present
-    def _try_extract_table(self, shape, shape_data: Dict, slide_data: Dict, shape_idx: int) -> None:
-        """
-        Try to extract table data from a shape.
-        """
+        # Extract image if shape is a picture
         try:
-            if hasattr(shape, "Table") and shape.Table is not None:
-                table = shape.Table
-                table_data = []
+            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                img_path = self._extract_picture(
+                    shape, slide_idx, images_dir, processed_hashes, image_counter
+                )
+                if img_path:
+                    img_filename = os.path.basename(img_path)
+                    images.append({
+                        "shape_index": shape_idx,
+                        "filename": img_filename,
+                        "path": img_path
+                    })
+                    # Add image reference to shape data for shape summary
+                    shape_data["image_ref"] = img_filename
+        except Exception as e:
+            logger.debug(f"Picture extraction failed for shape {shape_idx}: {e}")
 
-                for row_idx in range(table.Rows.Count):
-                    row = table.Rows[row_idx]
-                    row_data = []
+        # Extract table data if shape is a table
+        try:
+            if shape.has_table:
+                table_data = self._extract_table_data(shape.table)
+                if table_data:
+                    shape_data["table_data"] = table_data
+        except Exception as e:
+            logger.debug(f"Table extraction failed for shape {shape_idx}: {e}")
 
-                    for col_idx in range(row.Count):
-                        cell = row[col_idx]
-                        cell_text = ""
-                        if hasattr(cell, "TextFrame") and cell.TextFrame is not None:
-                            try:
-                                cell_text = cell.TextFrame.Text.strip() if cell.TextFrame.Text else ""
-                            except Exception:
-                                pass
+        # Check for grouped shapes
+        try:
+            if hasattr(shape, 'shapes'):
+                # This is a group shape, extract from children
+                for child_idx, child_shape in enumerate(shape.shapes):
+                    try:
+                        child_data, child_images = self._extract_shape_data(
+                            child_shape, f"{shape_idx}_{child_idx}", slide_idx,
+                            images_dir, processed_hashes, image_counter + len(images)
+                        )
+                        # Merge child text
+                        if child_data.get("text"):
+                            if shape_data["text"]:
+                                shape_data["text"] += "\n" + child_data["text"]
+                            else:
+                                shape_data["text"] = child_data["text"]
+                        images.extend(child_images)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+        return shape_data, images
+
+    # // ---> [_extract_picture] > extract image from Picture shape
+    def _extract_picture(
+        self, shape, slide_idx: int, images_dir: str,
+        processed_hashes: Set[str], counter: int
+    ) -> Optional[str]:
+        """Extract image from a Picture shape with deduplication."""
+        try:
+            # Get image blob from shape
+            image = shape.image
+            image_bytes = image.blob
+
+            # Check size
+            if len(image_bytes) > MAX_IMAGE_SIZE_MB * 1024 * 1024:
+                logger.debug(f"Skipping large image in shape")
+                return None
+
+            # Compute hash for deduplication
+            img_hash = self._compute_image_hash(image_bytes)
+            if img_hash in processed_hashes:
+                logger.debug(f"Skipping duplicate image")
+                return None
+            processed_hashes.add(img_hash)
+
+            # Determine extension from content type
+            content_type = image.content_type
+            ext_map = {
+                'image/png': '.png',
+                'image/jpeg': '.jpg',
+                'image/gif': '.gif',
+                'image/bmp': '.bmp',
+                'image/tiff': '.tiff',
+                'image/webp': '.webp',
+                'image/x-emf': '.emf',
+                'image/x-wmf': '.wmf',
+            }
+            ext = ext_map.get(content_type, '.png')
+
+            # Handle metafiles
+            if ext in ['.emf', '.wmf'] and PIL_AVAILABLE:
+                converted = self._try_convert_metafile(image_bytes)
+                if converted:
+                    image_bytes = converted
+                    ext = '.png'
+                else:
+                    # Skip unconvertible
+                    return None
+
+            filename = f"slide_{slide_idx + 1}_img_{counter}{ext}"
+            path = os.path.join(images_dir, filename)
+
+            with open(path, 'wb') as f:
+                f.write(image_bytes)
+
+            logger.debug(f"Extracted picture: {filename}")
+            return path
+
+        except Exception as e:
+            logger.debug(f"Failed to extract picture: {e}")
+            return None
+
+    # // ---> [_extract_table_data] > extract table cell data
+    def _extract_table_data(self, table) -> Optional[List[List[str]]]:
+        """Extract table data as 2D list of strings."""
+        try:
+            rows_data = []
+            for row in table.rows:
+                row_data = []
+                for cell in row.cells:
+                    try:
+                        cell_text = cell.text.strip() if cell.text else ""
                         row_data.append(cell_text)
-
-                    table_data.append(row_data)
-
-                shape_data["table_data"] = table_data
-                slide_data["tables"].append({
-                    "shape_index": shape_idx,
-                    "rows": len(table_data),
-                    "columns": len(table_data[0]) if table_data else 0,
-                    "data": table_data
-                })
-                logger.debug(f"Extracted table with {len(table_data)} rows")
+                    except Exception:
+                        row_data.append("")
+                rows_data.append(row_data)
+            return rows_data if rows_data else None
         except Exception as e:
             logger.debug(f"Table extraction failed: {e}")
+            return None
 
-    # // ---> on_message > [_extract_global_images] > fallback extraction of all presentation images
-    def _extract_global_images(self, ppt: Presentation, images_dir: str) -> List[str]:
-        """
-        Extract all images from the presentation using the global Images collection.
-        This is a fallback method to catch any images not extracted from individual shapes.
-        Returns list of saved image paths.
-        """
-        saved_paths = []
+    # // ---> [_format_presentation_header] > format presentation header
+    def _format_presentation_header(self, structured_data: Dict, filename: str) -> str:
+        """Format presentation header with metadata."""
+        parts = []
+        pres = structured_data.get("presentation", {})
+
+        parts.append(f"# PowerPoint Presentation: {filename}")
+        parts.append("")
+        parts.append(f"Total Slides: {pres.get('total_slides', 0)}")
+
+        # Include core properties if available
+        props = pres.get("properties", {})
+        if props.get("title"):
+            parts.append(f"Title: {props['title']}")
+        if props.get("author"):
+            parts.append(f"Author: {props['author']}")
+        if props.get("subject"):
+            parts.append(f"Subject: {props['subject']}")
+
+        parts.append("")
+        return "\n".join(parts)
+
+    # // ---> [_format_slide_text] > format slide data as text
+    def _format_slide_text(self, slide_data: Dict) -> str:
+        """Format slide data as structured text for RAG (matching expected format)."""
+        parts = []
+        slide_num = slide_data["slide_number"]
+
+        # Slide header
+        parts.append(f"{'='*80}")
+        parts.append("")
+        parts.append(f"SLIDE {slide_num}")
+        if slide_data.get("layout"):
+            parts.append(f"Layout: {slide_data['layout']}")
+        parts.append("")
+        parts.append(f"{'='*80}")
+        parts.append("")
+
+        # Text content section
+        if slide_data.get("text_content"):
+            parts.append("## Text Content:")
+            parts.append("")
+            for item in slide_data["text_content"]:
+                text = item.get('text', '')
+                if text:
+                    parts.append(text)
+                    parts.append("")
+
+        # Tables section
+        if slide_data.get("tables"):
+            parts.append("## Tables:")
+            parts.append("")
+            for idx, table in enumerate(slide_data["tables"]):
+                parts.append(f"Table {idx + 1} ({table['rows']} rows × {table['columns']} columns):")
+                for row in table.get("data", []):
+                    parts.append(" | ".join(str(c) if c else "" for c in row))
+                parts.append("")
+
+        # Images section
+        if slide_data.get("images"):
+            parts.append("## Images:")
+            parts.append("")
+            for img in slide_data["images"]:
+                shape_idx = img.get("shape_index", "N/A")
+                filename = img.get("filename", "unknown")
+                parts.append(f"- Image: {filename} (Shape Index: {shape_idx})")
+            parts.append("")
+
+        # Speaker Notes section
+        if slide_data.get("notes"):
+            parts.append("## Speaker Notes:")
+            parts.append("")
+            parts.append(slide_data["notes"])
+            parts.append("")
+
+        # Shape Summary section
+        shapes = slide_data.get("shapes", [])
+        if shapes:
+            parts.append(f"## Shape Summary: {len(shapes)} shapes")
+            parts.append("")
+            for shape in shapes:
+                shape_idx = shape.get("shape_index", "?")
+                shape_type = shape.get("shape_type", "Unknown")
+                shape_name = shape.get("name", "")
+
+                # Build shape info line
+                shape_info = f"  - Shape {shape_idx}: {shape_type}"
+                if shape_name:
+                    shape_info += f" (Name: {shape_name})"
+
+                # Add text preview if available
+                if shape.get("text"):
+                    text_preview = shape["text"][:50]
+                    if len(shape["text"]) > 50:
+                        text_preview += "..."
+                    shape_info += f" - Text: {text_preview}"
+
+                # Add image reference if available
+                if shape.get("image_ref"):
+                    shape_info += f" - Image: {shape['image_ref']}"
+
+                parts.append(shape_info)
+            parts.append("")
+
+        return "\n".join(parts)
+
+    # // ---> [_image_to_base64] > convert image to base64 data URL
+    def _image_to_base64(self, image_path: str) -> Optional[str]:
+        """Convert image file to base64 data URL for vLLM."""
         try:
-            for i, image in enumerate(ppt.Images):
-                image_filename = f"global_image_{i}.png"
-                image_path = os.path.join(images_dir, image_filename)
-                image.Image.Save(image_path)
-                saved_paths.append(image_path)
-                logger.debug(f"Extracted global image: {image_filename}")
+            with open(image_path, "rb") as f:
+                data = f.read()
+
+            if len(data) > MAX_IMAGE_SIZE_MB * 1024 * 1024:
+                logger.warning(f"Image too large for vLLM: {image_path}")
+                return None
+
+            b64 = base64.b64encode(data).decode("utf-8")
+            ext = Path(image_path).suffix.lower()
+            mime_types = {
+                ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp"
+            }
+            mime = mime_types.get(ext, "image/png")
+            return f"data:{mime};base64,{b64}"
         except Exception as e:
-            logger.debug(f"Global image extraction failed: {e}")
-        return saved_paths
+            logger.error(f"Failed to encode image: {e}")
+            return None
 
-    # // ---> on_message > [_image_to_base64_data_url] > reads image file, returns data:image/... URL
-    def _image_to_base64_data_url(self, image_path: str) -> str:
+    # // ---> [_describe_images_concurrent] > concurrent vLLM requests
+    async def _describe_images_concurrent(self, images: List[Dict]) -> List[str]:
         """
-        Convert an image file to a base64 data URL.
-        This is required because vLLM runs in a separate container and cannot
-        access file:// paths from this container's filesystem.
+        Describe images using concurrent vLLM requests.
+        Processes up to MAX_CONCURRENT_VLLM_REQUESTS in parallel.
         """
-        with open(image_path, "rb") as f:
-            img_data = base64.b64encode(f.read()).decode("utf-8")
+        if not images:
+            return []
 
-        # Detect MIME type from extension
-        ext = Path(image_path).suffix.lower()
-        mime_map = {
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".gif": "image/gif",
-            ".webp": "image/webp",
-            ".bmp": "image/bmp",
-            ".tiff": "image/tiff",
-        }
-        mime_type = mime_map.get(ext, "image/png")
+        # Filter valid images
+        valid_images = [img for img in images if os.path.exists(img["path"])]
+        if not valid_images:
+            return [""] * len(images)
 
-        return f"data:{mime_type};base64,{img_data}"
+        logger.info(f"Processing {len(valid_images)} images concurrently")
 
-    # // ---> on_message > [_describe_image_with_vllm] > POST to vLLM, returns description text
-    def _describe_image_with_vllm(self, image_path: str) -> str:
+        loop = asyncio.get_event_loop()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_CONCURRENT_VLLM_REQUESTS) as executor:
+            futures = [
+                loop.run_in_executor(executor, self._describe_single_image, img["path"])
+                for img in valid_images
+            ]
+            results = await asyncio.gather(*futures, return_exceptions=True)
+
+        # Process results
+        descriptions = []
+        for result in results:
+            if isinstance(result, Exception):
+                logger.error(f"Image description failed: {result}")
+                descriptions.append("")
+            else:
+                descriptions.append(result or "")
+
+        return descriptions
+
+    # // ---> [_describe_single_image] > single vLLM request
+    def _describe_single_image(self, image_path: str) -> str:
+        """Describe a single image using vLLM."""
         try:
-            # Convert image to base64 data URL instead of file:// path.
-            # CRITICAL: vLLM runs in a separate container and cannot access
-            # file:// paths from this container's filesystem.
-            logger.debug(f"Converting image to base64: {image_path}")
-            try:
-                image_url = self._image_to_base64_data_url(image_path)
-                logger.debug(f"Base64 image URL created, length: {len(image_url)} chars")
-            except Exception as e:
-                logger.error(f"Failed to encode image {image_path} to base64: {e}")
-                return "Description unavailable (image encoding failed)."
+            image_url = self._image_to_base64(image_path)
+            if not image_url:
+                return "Image could not be processed."
 
-            # NOTE: Do NOT include "response_format" parameter for plain text responses.
-            # vLLM v1 has a bug where any response_format triggers structured output validation
             payload = {
                 "model": self.vllm_model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": "Describe this image from a presentation slide."},
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": image_url},
-                            },
-                        ],
-                    }
-                ],
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Describe this image from a presentation slide in detail. "
+                                "Focus on: 1) Any text or labels visible, 2) Charts/graphs and their data, "
+                                "3) Diagrams and their relationships, 4) Key visual elements. "
+                                "Be concise but comprehensive."
+                            )
+                        },
+                        {"type": "image_url", "image_url": {"url": image_url}}
+                    ]
+                }]
             }
 
-            # Log the outgoing request (truncate base64 for readability)
-            try:
-                payload_log = json.loads(json.dumps(payload))
-                try:
-                    url_val = payload_log["messages"][0]["content"][1]["image_url"]["url"]
-                    if url_val.startswith("data:"):
-                        payload_log["messages"][0]["content"][1]["image_url"]["url"] = (
-                            url_val[:60] + f"...[{len(url_val)} chars total]"
-                        )
-                except (KeyError, IndexError):
-                    pass
-                logger.info(
-                    "vLLM request: POST %s payload=%s",
-                    self.vllm_api_url,
-                    json.dumps(payload_log, ensure_ascii=False),
-                )
-            except Exception as log_err:
-                logger.warning(f"Failed to serialize vLLM payload for logging: {log_err}")
-
-            logger.debug(f"Sending request to vLLM at {self.vllm_api_url}")
-            resp = requests.post(self.vllm_api_url, json=payload, timeout=120)
-
-            logger.debug(f"vLLM response status: {resp.status_code}")
+            resp = requests.post(self.vllm_api_url, json=payload, timeout=VLLM_TIMEOUT_SECONDS)
 
             if resp.status_code != 200:
-                logger.error(
-                    f"vLLM returned HTTP {resp.status_code}: {resp.text[:500]}"
-                )
-                return f"Description unavailable (HTTP {resp.status_code})."
+                logger.error(f"vLLM HTTP {resp.status_code}")
+                return f"Description unavailable (HTTP {resp.status_code})"
 
-            resp.raise_for_status()
             data = resp.json()
-
-            logger.debug(f"vLLM response JSON keys: {list(data.keys())}")
-
-            # vLLM OpenAI-compatible response
             choice = (data.get("choices") or [{}])[0]
-            msg = choice.get("message") or {}
-            content = msg.get("content")
+            content = (choice.get("message") or {}).get("content", "")
+
             if isinstance(content, str):
                 return content.strip()
-            # Some implementations may return list content parts
             if isinstance(content, list):
-                texts = [c.get("text", "") for c in content if c.get("type") == "text"]
-                return "\n".join([t for t in texts if t]).strip() or "No description returned."
-            return "No description returned."
+                return "\n".join(c.get("text", "") for c in content if c.get("type") == "text")
+            return ""
+
         except requests.exceptions.Timeout:
-            logger.error(f"vLLM request timed out for {image_path}")
-            return "Description unavailable (timeout)."
-        except requests.exceptions.ConnectionError as e:
-            logger.error(f"vLLM connection error for {image_path}: {e}")
-            return "Description unavailable (connection error)."
+            return "Description unavailable (timeout)"
         except Exception as e:
-            logger.error(f"vLLM request failed for {image_path}: {type(e).__name__}: {e}")
-            return "Description unavailable."
+            logger.error(f"vLLM error: {e}")
+            return "Description unavailable"
 
 
 def run():
-
     Processor.launch(default_ident, __doc__)
-

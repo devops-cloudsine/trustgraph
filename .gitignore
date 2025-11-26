@@ -16,3 +16,4 @@ trustgraph-vertexai/trustgraph/vertexai_version.py
 trustgraph-mcp/trustgraph/mcp_version.py
 vertexai/
 .venv/
+files_to_parse/
