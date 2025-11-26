@@ -17,6 +17,8 @@ dependencies = [
     "pdf2image",
     "pytesseract",
     "requests",
+    "spire-doc",
+    "spire-presentation",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -27,7 +29,9 @@ classifiers = [
 Homepage = "https://github.com/trustgraph-ai/trustgraph"
 
 [project.scripts]
-pdf-ocr = "trustgraph.decoding.ocr:run"
+pdf-ocr = "trustgraph.decoding.ocr.pdf_decoder:run"
+docx-ocr = "trustgraph.decoding.ocr.docx_decoder:run"
+pptx-ocr = "trustgraph.decoding.ocr.pptx_decoder:run"
 
 [tool.setuptools.packages.find]
 include = ["trustgraph*"]

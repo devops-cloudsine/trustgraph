@@ -78,6 +78,11 @@ class Processor(FlowProcessor):
 
         blob = base64.b64decode(v.data)
 
+        # Check if this is a PDF file (magic bytes: %PDF)
+        if not self._is_pdf(blob):
+            logger.info(f"Skipping non-PDF file: {v.metadata.id}")
+            return
+
         # Prepare output directory for this document
         doc_dir = os.path.join(self.files_base_dir, self._safe_id(v.metadata.id))
         os.makedirs(doc_dir, exist_ok=True)
@@ -111,6 +116,12 @@ class Processor(FlowProcessor):
     @staticmethod
     def add_args(parser):
         FlowProcessor.add_args(parser)
+
+    # // ---> on_message > [_is_pdf] > check if blob is a PDF file
+    def _is_pdf(self, blob: bytes) -> bool:
+        """Check if the blob is a PDF file by examining magic bytes."""
+        # PDF files start with %PDF
+        return blob[:4] == b'%PDF'
 
     # // ---> on_message > [_safe_id] > sanitize directory name
     def _safe_id(self, value: str) -> str:
