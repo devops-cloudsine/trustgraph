@@ -17,3 +17,4 @@ trustgraph-mcp/trustgraph/mcp_version.py
 vertexai/
 .venv/
 files_to_parse/
+/home/ubuntu/Github/trustgraph/deployment/.env
