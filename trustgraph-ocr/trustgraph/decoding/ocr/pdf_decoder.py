@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 if os.environ.get("VLLM_LOGGING_LEVEL", "").upper() == "DEBUG":
     logger.setLevel(logging.DEBUG)
 
-default_ident = "pdf-decoder"
+default_ident = "pdf-ocr"
 
 class Processor(FlowProcessor):
 
