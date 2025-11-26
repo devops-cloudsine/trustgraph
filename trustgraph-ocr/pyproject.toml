@@ -19,6 +19,7 @@ dependencies = [
     "requests",
     "spire-doc",
     "spire-presentation",
+    "Pillow",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -32,6 +33,7 @@ Homepage = "https://github.com/trustgraph-ai/trustgraph"
 pdf-ocr = "trustgraph.decoding.ocr.pdf_decoder:run"
 docx-ocr = "trustgraph.decoding.ocr.docx_decoder:run"
 pptx-ocr = "trustgraph.decoding.ocr.pptx_decoder:run"
+image-ocr = "trustgraph.decoding.ocr.image_decoder:run"
 
 [tool.setuptools.packages.find]
 include = ["trustgraph*"]

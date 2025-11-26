@@ -24,3 +24,9 @@ try:
     from . pptx_decoder import *
 except ImportError as e:
     logger.debug(f"pptx_decoder not available: {e}")
+
+# Import image_decoder (uses vLLM for image descriptions)
+try:
+    from . image_decoder import *
+except ImportError as e:
+    logger.warning(f"image_decoder not available: {e}")
