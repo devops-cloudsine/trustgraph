@@ -1,1 +1,0 @@
-/home/ubuntu/deploy-trustgraph.sh

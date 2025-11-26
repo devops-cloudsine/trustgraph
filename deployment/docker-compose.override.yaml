@@ -1,0 +1,100 @@
+version: "3.8"
+
+x-trustgraph-dev: &trustgraph_dev
+  image: docker.io/trustgraph/trustgraph-flow:dev
+  volumes:
+    - /home/ubuntu/Github/trustgraph/trustgraph-base:/src/trustgraph-base
+    - /home/ubuntu/Github/trustgraph/trustgraph-flow:/src/trustgraph-flow
+
+x-trustgraph-ocr-dev: &trustgraph_ocr_dev
+  build:
+    context: /home/ubuntu/Github/trustgraph
+    dockerfile: Containerfile.ocr.dev
+  image: trustgraph-ocr-dev:latest
+  volumes:
+    - /home/ubuntu/Github/trustgraph/trustgraph-base:/src/trustgraph-base
+    - /home/ubuntu/Github/trustgraph/trustgraph-ocr:/src/trustgraph-ocr
+
+services:
+  agent-manager:
+    <<: *trustgraph_dev
+  chunker:
+    <<: *trustgraph_dev
+  config-svc:
+    <<: *trustgraph_dev
+  document-embeddings:
+    <<: *trustgraph_dev
+  pdf-decoder:
+    <<: *trustgraph_dev
+  document-rag:
+    <<: *trustgraph_dev
+  document-retrieval:
+    <<: *trustgraph_dev
+  graph-embeddings:
+    <<: *trustgraph_dev
+  graph-rag:
+    <<: *trustgraph_dev
+  graph-retrieval:
+    <<: *trustgraph_dev
+  init-trustgraph:
+    <<: *trustgraph_dev
+  kg-extract-agent:
+    <<: *trustgraph_dev
+  kg-extract-definitions:
+    <<: *trustgraph_dev
+  kg-extract-objects:
+    <<: *trustgraph_dev
+  kg-extract-relationships:
+    <<: *trustgraph_dev
+  kg-manager:
+    <<: *trustgraph_dev
+  kg-store:
+    <<: *trustgraph_dev
+  mcp-tool:
+    <<: *trustgraph_dev
+  metering:
+    <<: *trustgraph_dev
+  metering-rag:
+    <<: *trustgraph_dev
+  nlp-query:
+    <<: *trustgraph_dev
+  prompt:
+    <<: *trustgraph_dev
+  prompt-rag:
+    <<: *trustgraph_dev
+  query-doc-embeddings:
+    <<: *trustgraph_dev
+  query-graph-embeddings:
+    <<: *trustgraph_dev
+  query-objects:
+    <<: *trustgraph_dev
+  query-triples:
+    <<: *trustgraph_dev
+  store-doc-embeddings:
+    <<: *trustgraph_dev
+  store-graph-embeddings:
+    <<: *trustgraph_dev
+  store-objects:
+    <<: *trustgraph_dev
+  store-triples:
+    <<: *trustgraph_dev
+  structured-diag:
+    <<: *trustgraph_dev
+  structured-query:
+    <<: *trustgraph_dev
+  text-completion:
+    <<: *trustgraph_dev
+  text-completion-rag:
+    <<: *trustgraph_dev
+  librarian:
+    <<: *trustgraph_dev
+  pdf-ocr:
+    <<: *trustgraph_ocr_dev
+  docx-ocr:
+    <<: *trustgraph_ocr_dev
+  pptx-ocr:
+    <<: *trustgraph_ocr_dev
+  xlsx-ocr:
+    <<: *trustgraph_ocr_dev
+  image-ocr:
+    <<: *trustgraph_ocr_dev
