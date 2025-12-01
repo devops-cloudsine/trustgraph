@@ -16,6 +16,8 @@ x-trustgraph-ocr-dev: &trustgraph_ocr_dev
     - /home/ubuntu/Github/trustgraph/trustgraph-ocr:/src/trustgraph-ocr
 
 services:
+  api-gateway:
+    <<: *trustgraph_dev
   agent-manager:
     <<: *trustgraph_dev
   chunker:

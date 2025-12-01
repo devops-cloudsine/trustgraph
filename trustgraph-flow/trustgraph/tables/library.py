@@ -140,6 +140,14 @@ class LibraryTableStore:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """)
 
+        # Cross-keyspace query for document embeddings status
+        # Uses knowledge keyspace to check embedding status
+        self.get_document_embeddings_status_stmt = self.cassandra.prepare("""
+            SELECT id, time, chunks
+            FROM knowledge.document_embeddings
+            WHERE user = ? AND document_id = ?
+        """)
+
         self.update_document_stmt = self.cassandra.prepare("""
             UPDATE document
             SET time = ?, title = ?, comments = ?,
@@ -572,6 +580,102 @@ class LibraryTableStore:
         logger.debug("Done")
 
         return lst
+
+    # ---> Librarian.get_document_status > [LibraryTableStore.get_document_status] > returns (status, embedding_count, chunk_count, last_updated)
+    async def get_document_status(self, user, document_id, collection=None):
+        """
+        Query document embeddings status from the knowledge keyspace.
+        Returns status information about document processing completion.
+        
+        Args:
+            user: User identifier
+            document_id: Document identifier
+            collection: Optional collection name (for future filtering)
+            
+        Returns:
+            dict with keys: status, embedding_count, chunk_count, last_updated
+        """
+        logger.debug(f"Getting document status for {user}/{document_id}")
+
+        # Check if document exists in library
+        doc_exists = await self.document_exists(user, document_id)
+        
+        if not doc_exists:
+            return {
+                "status": "not_found",
+                "embedding_count": 0,
+                "chunk_count": 0,
+                "last_updated": 0,
+            }
+
+        # Query the knowledge keyspace for document embeddings
+        try:
+            resp = self.cassandra.execute(
+                self.get_document_embeddings_status_stmt,
+                (user, document_id)
+            )
+
+            total_chunks = 0
+            total_embeddings = 0
+            latest_time = 0
+
+            for row in resp:
+                # row[0] = id (uuid)
+                # row[1] = time (timestamp)
+                # row[2] = chunks (list of tuples)
+                
+                if row[1]:
+                    row_time = int(row[1].timestamp() * 1000)
+                    if row_time > latest_time:
+                        latest_time = row_time
+                
+                if row[2]:
+                    for chunk in row[2]:
+                        total_chunks += 1
+                        # chunk is (blob, list of vectors)
+                        if len(chunk) > 1 and chunk[1]:
+                            total_embeddings += len(chunk[1])
+
+            if total_embeddings > 0:
+                status = "completed"
+            else:
+                # Check if there's a processing record
+                processing_exists = await self._has_processing_for_document(
+                    user, document_id
+                )
+                if processing_exists:
+                    status = "processing"
+                else:
+                    status = "pending"
+
+            return {
+                "status": status,
+                "embedding_count": total_embeddings,
+                "chunk_count": total_chunks,
+                "last_updated": latest_time,
+            }
+
+        except Exception as e:
+            logger.error(f"Error querying document status: {e}", exc_info=True)
+            # If knowledge keyspace doesn't exist yet, return pending
+            return {
+                "status": "pending",
+                "embedding_count": 0,
+                "chunk_count": 0,
+                "last_updated": 0,
+            }
+
+    async def _has_processing_for_document(self, user, document_id):
+        """Check if any processing record exists for this document"""
+        try:
+            # List all processing and filter by document_id
+            processing_list = await self.list_processing(user)
+            for proc in processing_list:
+                if proc.document_id == document_id:
+                    return True
+            return False
+        except Exception:
+            return False
 
 
 

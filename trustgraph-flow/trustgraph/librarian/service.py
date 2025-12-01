@@ -44,6 +44,7 @@ default_minio_host = "minio:9000"
 default_minio_access_key = "minioadmin"
 default_minio_secret_key = "minioadmin"
 default_cassandra_host = "cassandra"
+default_qdrant_uri = "http://qdrant:6333"
 
 bucket_name = "library"
 
@@ -83,6 +84,9 @@ class Processor(AsyncProcessor):
             "minio_secret_key",
             default_minio_secret_key
         )
+
+        qdrant_uri = params.get("qdrant_uri", default_qdrant_uri)
+        self.qdrant_uri = qdrant_uri
 
         cassandra_host = params.get("cassandra_host")
         cassandra_username = params.get("cassandra_username")
@@ -210,6 +214,7 @@ class Processor(AsyncProcessor):
             bucket_name = bucket_name,
             keyspace = keyspace,
             load_document = self.load_document,
+            milvus_uri = self.qdrant_uri,  # Pass qdrant_uri to milvus_uri param for backward compat
         )
 
         self.collection_manager = CollectionManager(
@@ -362,6 +367,7 @@ class Processor(AsyncProcessor):
             "remove-processing": self.librarian.remove_processing,
             "list-documents": self.librarian.list_documents,
             "list-processing": self.librarian.list_processing,
+            "get-document-status": self.librarian.get_document_status,
         }
 
         if v.operation not in impls:
@@ -533,6 +539,12 @@ class Processor(AsyncProcessor):
             default='minioadmin',
             help='Minio secret key / password '
             f'(default: {default_minio_access_key})',
+        )
+
+        parser.add_argument(
+            '--qdrant-uri',
+            default=default_qdrant_uri,
+            help=f'Qdrant URI for document status checks (default: {default_qdrant_uri})',
         )
 
         add_cassandra_args(parser)

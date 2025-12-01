@@ -286,6 +286,41 @@ Response:
 {}
 ```
 
+### GET-DOCUMENT-STATUS - Check Document Processing Status
+
+Check whether a document has completed processing and has obtained all embeddings.
+
+Request:
+```json
+{
+    "operation": "get-document-status",
+    "document-id": "doc-123",
+    "user": "alice",
+    "collection": "research"
+}
+```
+
+Response:
+```json
+{
+    "document-status": {
+        "document-id": "doc-123",
+        "user": "alice",
+        "collection": "research",
+        "status": "completed",
+        "embedding-count": 42,
+        "chunk-count": 15,
+        "last-updated": 1640995500000
+    }
+}
+```
+
+**Status Values:**
+- `not_found` - Document does not exist in the library
+- `pending` - Document exists but no processing has been started
+- `processing` - Processing has been started but no embeddings found yet
+- `completed` - Embeddings have been generated and stored
+
 ## REST service
 
 The REST service is available at `/api/v1/librarian` and accepts the above request formats.
@@ -370,6 +405,11 @@ await client.add_processing(
     flow="pdf-extraction",
     user="alice"
 )
+
+# Check document processing status
+status = await client.get_document_status("doc-123", "alice", "research")
+if status["status"] == "completed":
+    print(f"Processing complete! {status['embedding-count']} embeddings generated.")
 ```
 
 ## Features

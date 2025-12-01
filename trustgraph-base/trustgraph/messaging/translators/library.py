@@ -1,7 +1,33 @@
 from typing import Dict, Any, Tuple, Optional
-from ...schema import LibrarianRequest, LibrarianResponse, DocumentMetadata, ProcessingMetadata, Criteria
+from ...schema import LibrarianRequest, LibrarianResponse, DocumentMetadata, ProcessingMetadata, Criteria, DocumentStatus
 from .base import MessageTranslator
 from .metadata import DocumentMetadataTranslator, ProcessingMetadataTranslator
+
+
+class DocumentStatusTranslator(MessageTranslator):
+    """Translator for DocumentStatus schema objects"""
+    
+    def to_pulsar(self, data: Dict[str, Any]) -> DocumentStatus:
+        return DocumentStatus(
+            document_id=data.get("document-id", ""),
+            user=data.get("user", ""),
+            collection=data.get("collection", ""),
+            status=data.get("status", ""),
+            embedding_count=data.get("embedding-count", 0),
+            chunk_count=data.get("chunk-count", 0),
+            last_updated=data.get("last-updated", 0),
+        )
+    
+    def from_pulsar(self, obj: DocumentStatus) -> Dict[str, Any]:
+        return {
+            "document-id": obj.document_id or "",
+            "user": obj.user or "",
+            "collection": obj.collection or "",
+            "status": obj.status or "",
+            "embedding-count": obj.embedding_count or 0,
+            "chunk-count": obj.chunk_count or 0,
+            "last-updated": obj.last_updated or 0,
+        }
 
 
 class LibraryRequestTranslator(MessageTranslator):
@@ -92,6 +118,7 @@ class LibraryResponseTranslator(MessageTranslator):
     def __init__(self):
         self.doc_metadata_translator = DocumentMetadataTranslator()
         self.proc_metadata_translator = ProcessingMetadataTranslator()
+        self.doc_status_translator = DocumentStatusTranslator()
     
     def to_pulsar(self, data: Dict[str, Any]) -> LibrarianResponse:
         raise NotImplementedError("Response translation to Pulsar not typically needed")
@@ -116,6 +143,9 @@ class LibraryResponseTranslator(MessageTranslator):
                 self.proc_metadata_translator.from_pulsar(pm)
                 for pm in obj.processing_metadatas
             ]
+        
+        if obj.document_status:
+            result["document-status"] = self.doc_status_translator.from_pulsar(obj.document_status)
         
         return result
     

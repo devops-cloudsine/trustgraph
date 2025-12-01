@@ -188,3 +188,33 @@ class DocVectors:
         else:
             logger.info(f"Collection {collection_name} does not exist, nothing to delete")
 
+    def get_collection_stats(self, user, collection):
+        """
+        Get statistics for a collection (embedding count).
+        Returns dict with 'exists' and 'count' keys.
+        """
+        collection_name = make_safe_collection_name(user, collection, self.prefix)
+        
+        if not self.client.has_collection(collection_name):
+            return {
+                "exists": False,
+                "count": 0,
+            }
+        
+        try:
+            # Get collection stats
+            stats = self.client.get_collection_stats(collection_name)
+            row_count = int(stats.get("row_count", 0))
+            
+            return {
+                "exists": True,
+                "count": row_count,
+            }
+        except Exception as e:
+            logger.error(f"Error getting collection stats: {e}")
+            # Collection exists but couldn't get stats
+            return {
+                "exists": True,
+                "count": -1,  # Unknown count
+            }
+

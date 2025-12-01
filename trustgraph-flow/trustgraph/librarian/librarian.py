@@ -1,11 +1,13 @@
 
-from .. schema import LibrarianRequest, LibrarianResponse, Error, Triple
+from .. schema import LibrarianRequest, LibrarianResponse, Error, Triple, DocumentStatus
 from .. knowledge import hash
 from .. exceptions import RequestError
 from .. tables.library import LibraryTableStore
 from . blob_store import BlobStore
 import base64
 import logging
+
+from qdrant_client import QdrantClient
 
 import uuid
 
@@ -47,6 +49,7 @@ class Librarian:
             cassandra_host, cassandra_username, cassandra_password,
             minio_host, minio_access_key, minio_secret_key,
             bucket_name, keyspace, load_document,
+            milvus_uri=None,
     ):
 
         self.blob_store = BlobStore(
@@ -58,6 +61,15 @@ class Librarian:
         )
 
         self.load_document = load_document
+
+        # Qdrant connection for document status check
+        self.qdrant_uri = milvus_uri or "http://qdrant:6333"  # Use qdrant default
+        try:
+            self.qdrant = QdrantClient(url=self.qdrant_uri)
+            logger.info(f"Librarian connected to Qdrant at {self.qdrant_uri}")
+        except Exception as e:
+            logger.warning(f"Could not connect to Qdrant: {e}. Status checks may be limited.")
+            self.qdrant = None
 
     # ---> HTTP API Gateway > Processor.process_request('add-document') > [Librarian.add_document] > BlobStore.add + LibraryTableStore.add_document
     async def add_document(self, request):
@@ -102,6 +114,7 @@ class Librarian:
             content = None,
             document_metadatas = None,
             processing_metadatas = None,
+            document_status = None,
         )
 
     # ---> HTTP API Gateway > Processor.process_request('remove-document') > [Librarian.remove_document] > BlobStore.remove + LibraryTableStore.remove_document
@@ -137,6 +150,7 @@ class Librarian:
             content = None,
             document_metadatas = None,
             processing_metadatas = None,
+            document_status = None,
         )
 
     # ---> HTTP API Gateway > Processor.process_request('update-document') > [Librarian.update_document] > LibraryTableStore.update_document
@@ -162,6 +176,7 @@ class Librarian:
             content = None,
             document_metadatas = None,
             processing_metadatas = None,
+            document_status = None,
         )
 
     # ---> HTTP API Gateway > Processor.process_request('get-document-metadata') > [Librarian.get_document_metadata] > returns LibrarianResponse
@@ -182,6 +197,7 @@ class Librarian:
             content = None,
             document_metadatas = None,
             processing_metadatas = None,
+            document_status = None,
         )
 
     # ---> HTTP API Gateway > Processor.process_request('get-document-content') > [Librarian.get_document_content] > BlobStore.get -> returns LibrarianResponse
@@ -206,6 +222,7 @@ class Librarian:
             content = base64.b64encode(content).decode("utf-8"),
             document_metadatas = None,
             processing_metadatas = None,
+            document_status = None,
         )
 
     # ---> Processor.add_processing_with_collection > [Librarian.add_processing] > Processor.load_document(document) -> flow('text-load'|'document-load')
@@ -258,6 +275,7 @@ class Librarian:
             content = None,
             document_metadatas = None,
             processing_metadatas = None,
+            document_status = None,
         )
 
     # ---> HTTP API Gateway > Processor.process_request('remove-processing') > [Librarian.remove_processing] > LibraryTableStore.remove_processing
@@ -285,6 +303,7 @@ class Librarian:
             content = None,
             document_metadatas = None,
             processing_metadatas = None,
+            document_status = None,
         )
 
     # ---> HTTP API Gateway > Processor.process_request('list-documents') > [Librarian.list_documents] > returns LibrarianResponse
@@ -298,6 +317,7 @@ class Librarian:
             content = None,
             document_metadatas = docs,
             processing_metadatas = None,
+            document_status = None,
         )
 
     # ---> HTTP API Gateway > Processor.process_request('list-processing') > [Librarian.list_processing] > returns LibrarianResponse
@@ -311,5 +331,117 @@ class Librarian:
             content = None,
             document_metadatas = None,
             processing_metadatas = procs,
+            document_status = None,
         )
+
+    # ---> HTTP API Gateway > Processor.process_request('get-document-status') > [Librarian.get_document_status] > returns LibrarianResponse with DocumentStatus
+    async def get_document_status(self, request):
+        """
+        Get the processing status and embedding count for a document.
+        Checks if document processing is complete by querying Milvus embeddings.
+        """
+        logger.debug(f"Getting document status for {request.user}/{request.document_id}")
+
+        user = request.user
+        document_id = request.document_id
+        collection = request.collection
+
+        # Check if document exists in library
+        doc_exists = await self.table_store.document_exists(user, document_id)
+        
+        if not doc_exists:
+            doc_status = DocumentStatus(
+                document_id=document_id,
+                user=user,
+                collection=collection or "",
+                status="not_found",
+                embedding_count=0,
+                chunk_count=0,
+                last_updated=0,
+            )
+            return LibrarianResponse(
+                error=None,
+                document_metadata=None,
+                content=None,
+                document_metadatas=None,
+                processing_metadatas=None,
+                document_status=doc_status,
+            )
+
+        # Check if there's a processing record for this document
+        processing_exists = await self._has_processing_for_document(user, document_id)
+        
+        # If no collection specified, try to get it from processing record
+        if not collection and processing_exists:
+            collection = await self._get_collection_for_document(user, document_id)
+
+        # Query Qdrant for embedding count
+        embedding_count = 0
+        status = "pending"
+        
+        if collection and self.qdrant:
+            try:
+                # Qdrant collection name format: d_{user}_{collection}
+                qdrant_collection = f"d_{user}_{collection}"
+                
+                if self.qdrant.collection_exists(qdrant_collection):
+                    # Get collection info to get point count
+                    collection_info = self.qdrant.get_collection(qdrant_collection)
+                    embedding_count = collection_info.points_count or 0
+                    
+                    if embedding_count > 0:
+                        status = "completed"
+                    elif processing_exists:
+                        status = "processing"
+                    else:
+                        status = "pending"
+                elif processing_exists:
+                    status = "processing"
+            except Exception as e:
+                logger.warning(f"Error querying Qdrant for status: {e}")
+                if processing_exists:
+                    status = "processing"
+        elif processing_exists:
+            status = "processing"
+
+        doc_status = DocumentStatus(
+            document_id=document_id,
+            user=user,
+            collection=collection or "",
+            status=status,
+            embedding_count=embedding_count,
+            chunk_count=embedding_count,  # In Milvus, each row is a chunk
+            last_updated=0,  # Milvus doesn't track timestamps per-document
+        )
+
+        return LibrarianResponse(
+            error=None,
+            document_metadata=None,
+            content=None,
+            document_metadatas=None,
+            processing_metadatas=None,
+            document_status=doc_status,
+        )
+
+    async def _has_processing_for_document(self, user, document_id):
+        """Check if any processing record exists for this document"""
+        try:
+            processing_list = await self.table_store.list_processing(user)
+            for proc in processing_list:
+                if proc.document_id == document_id:
+                    return True
+            return False
+        except Exception:
+            return False
+
+    async def _get_collection_for_document(self, user, document_id):
+        """Get the collection name from processing record for a document"""
+        try:
+            processing_list = await self.table_store.list_processing(user)
+            for proc in processing_list:
+                if proc.document_id == document_id:
+                    return proc.collection
+            return None
+        except Exception:
+            return None
 

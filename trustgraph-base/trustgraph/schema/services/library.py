@@ -50,6 +50,11 @@ from ..knowledge.document import Document, TextDocument
 #   <- (processing_metadata[])
 #   <- (error)
 
+# get-document-status
+#   -> (document_id, user, collection?)
+#   <- (document_status)
+#   <- (error)
+
 class DocumentMetadata(Record):
     id = String()
     time = Long()
@@ -74,11 +79,20 @@ class Criteria(Record):
     value = String()
     operator = String()
 
+class DocumentStatus(Record):
+    document_id = String()
+    user = String()
+    collection = String()
+    status = String()  # "pending" | "processing" | "completed" | "not_found"
+    embedding_count = Long()
+    chunk_count = Long()
+    last_updated = Long()  # Unix timestamp in milliseconds
+
 class LibrarianRequest(Record):
 
     # add-document, remove-document, update-document, get-document-metadata,
     # get-document-content, add-processing, remove-processing, list-documents,
-    # list-processing
+    # list-processing, get-document-status
     operation = String()
 
     # add-document, remove-document, update-document, get-document-metadata,
@@ -112,6 +126,7 @@ class LibrarianResponse(Record):
     content = Bytes()
     document_metadatas = Array(DocumentMetadata())
     processing_metadatas = Array(ProcessingMetadata())
+    document_status = DocumentStatus()
 
 # FIXME: Is this right?  Using persistence on librarian so that
 # message chunking works
