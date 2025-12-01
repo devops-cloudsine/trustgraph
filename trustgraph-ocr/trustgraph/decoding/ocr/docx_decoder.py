@@ -10,6 +10,7 @@ Key features:
 - Image deduplication by MD5 hash to avoid redundant LLM calls
 - Robust error handling that continues processing even if parts fail
 - Extracts text, tables, headers/footers, and images
+- Images stored in MinIO for persistence
 
 Reference: https://python-docx.readthedocs.io/
 """
@@ -30,6 +31,7 @@ from typing import Dict, List, Any, Optional, Set, Tuple
 
 from ... schema import Document as TGDocument, TextDocument
 from ... base import FlowProcessor, ConsumerSpec, ProducerSpec
+from .minio_storage import MinioStorage, get_minio_storage
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -76,10 +78,9 @@ class Processor(FlowProcessor):
             "vllm_model",
             "Qwen/Qwen3-VL-4B-Instruct"
         )
-        self.files_base_dir = params.get(
-            "files_base_dir",
-            "/root/files_to_parse"
-        )
+        
+        # Initialize MinIO storage for image persistence
+        self.minio_storage = get_minio_storage()
 
         super(Processor, self).__init__(
             **params | {"id": id}
@@ -107,32 +108,34 @@ class Processor(FlowProcessor):
         logger.info("DOCX message received for extraction")
 
         v = msg.value()
-        logger.info(f"Processing {v.metadata.id}...")
+        doc_id = v.metadata.id
+        logger.info(f"Processing {doc_id}...")
 
         blob = base64.b64decode(v.data)
 
         # Check if this is a DOCX file
         content_type = getattr(v, "content_type", None)
         if not self._is_docx(blob, content_type):
-            logger.info(f"Skipping non-DOCX file: {v.metadata.id} (content_type: {content_type})")
+            logger.info(f"Skipping non-DOCX file: {doc_id} (content_type: {content_type})")
             return
 
-        # Prepare output directories
-        doc_dir = os.path.join(self.files_base_dir, self._safe_id(v.metadata.id))
-        os.makedirs(doc_dir, exist_ok=True)
-        images_dir = os.path.join(doc_dir, "images")
-        os.makedirs(images_dir, exist_ok=True)
-
-        # Save DOCX to file
-        temp_docx_path = os.path.join(doc_dir, "source.docx")
-        try:
-            with open(temp_docx_path, "wb") as f:
-                f.write(blob)
-            logger.debug(f"Saved DOCX to file: {temp_docx_path}")
-        except Exception as e:
-            logger.error(f"Failed to save DOCX to file: {e}")
-            await self._process_with_fallback(blob, images_dir, v, flow)
+        # Initialize MinIO storage
+        if not self.minio_storage.initialize():
+            logger.error("Failed to initialize MinIO storage - cannot process DOCX")
             return
+
+        # Save original DOCX document to MinIO
+        docx_filename = f"{self._safe_id(doc_id)}.docx"
+        doc_object_name = self.minio_storage.save_document(
+            doc_id=doc_id,
+            filename=docx_filename,
+            document_data=blob,
+            content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        if doc_object_name:
+            logger.info(f"Saved original DOCX to MinIO: {doc_object_name}")
+        else:
+            logger.warning("Failed to save original DOCX to MinIO, continuing with processing")
 
         # Track processed image hashes for deduplication
         processed_hashes: Set[str] = set()
@@ -140,20 +143,21 @@ class Processor(FlowProcessor):
         structured_data = None
         docx_success = False
 
-        # Try python-docx extraction
+        # Try python-docx extraction (loads from BytesIO)
         if DOCX_AVAILABLE:
             docx_success, structured_data, all_images = self._try_docx_extraction(
-                temp_docx_path, blob, images_dir, processed_hashes
+                blob, doc_id, processed_hashes
             )
 
         # Fallback to zipfile extraction if python-docx failed
         if not docx_success:
             logger.info("Using zipfile fallback extraction")
-            fallback_images = self._extract_images_from_zip(blob, images_dir, processed_hashes)
-            for ix, (image_path, original_name) in enumerate(fallback_images):
+            fallback_images = self._extract_images_from_zip(blob, doc_id, processed_hashes)
+            for ix, img_info in enumerate(fallback_images):
                 all_images.append({
-                    "path": image_path,
-                    "context": f"Image {ix + 1} ({original_name})",
+                    "data": img_info["data"],
+                    "content_type": img_info["content_type"],
+                    "context": f"Image {ix + 1} ({img_info['original_name']})",
                     "paragraph_index": None
                 })
             structured_data = {
@@ -203,7 +207,9 @@ class Processor(FlowProcessor):
         # Process images with concurrent vLLM requests
         if all_images:
             logger.info(f"Processing {len(all_images)} unique images with concurrent vLLM requests")
-            image_descriptions = await self._describe_images_concurrent(all_images)
+            
+            # Save images to MinIO and get descriptions concurrently
+            image_descriptions = await self._describe_images_concurrent_bytes(all_images, doc_id)
 
             # Send image descriptions
             for idx, (img_info, description) in enumerate(zip(all_images, image_descriptions)):
@@ -220,30 +226,32 @@ class Processor(FlowProcessor):
 
     # // ---> on_message > [_try_docx_extraction] > extract using python-docx with fallback
     def _try_docx_extraction(
-        self, docx_path: str, blob: bytes, images_dir: str, processed_hashes: Set[str]
+        self, blob: bytes, doc_id: str, processed_hashes: Set[str]
     ) -> Tuple[bool, Optional[Dict], List[Dict]]:
         """
         Try to extract content using python-docx.
         Falls back to zipfile if python-docx fails completely.
+        Images are stored in memory with bytes data for MinIO upload.
         """
         all_images = []
         structured_data = None
 
         try:
-            # Try loading from file first
-            logger.debug("Trying python-docx load from file")
-            doc = DocxDocument(docx_path)
+            # Load from bytes (in-memory)
+            logger.debug("Trying python-docx load from bytes")
+            doc = DocxDocument(BytesIO(blob))
             logger.info(f"python-docx loaded successfully: {len(doc.paragraphs)} paragraphs")
 
-            # Extract all content
-            structured_data = self._extract_structured_docx(doc, images_dir, processed_hashes)
+            # Extract all content (images stored as bytes)
+            structured_data = self._extract_structured_docx(doc, doc_id, processed_hashes)
             logger.info(f"Extracted {len(structured_data['document']['paragraphs'])} paragraphs, "
                        f"{len(structured_data['document']['tables'])} tables")
 
-            # Collect images
+            # Collect images with bytes data
             for img_info in structured_data["document"].get("images", []):
                 all_images.append({
-                    "path": img_info["path"],
+                    "data": img_info["data"],
+                    "content_type": img_info["content_type"],
                     "context": f"Document Image - {img_info['filename']}",
                     "paragraph_index": img_info.get("paragraph_index")
                 })
@@ -251,42 +259,27 @@ class Processor(FlowProcessor):
             return True, structured_data, all_images
 
         except Exception as e:
-            logger.warning(f"python-docx file load failed: {e}")
+            logger.warning(f"python-docx load failed: {e}")
+            return False, None, []
 
-            # Try loading from bytes (in-memory)
-            try:
-                logger.debug("Trying python-docx load from bytes")
-                doc = DocxDocument(BytesIO(blob))
-                logger.info(f"python-docx loaded from bytes: {len(doc.paragraphs)} paragraphs")
-
-                structured_data = self._extract_structured_docx(doc, images_dir, processed_hashes)
-
-                for img_info in structured_data["document"].get("images", []):
-                    all_images.append({
-                        "path": img_info["path"],
-                        "context": f"Document Image - {img_info['filename']}",
-                        "paragraph_index": img_info.get("paragraph_index")
-                    })
-
-                return True, structured_data, all_images
-
-            except Exception as e2:
-                logger.warning(f"python-docx bytes load also failed: {e2}")
-                return False, None, []
-
-    # // ---> on_message > [_process_with_fallback] > handle fallback when file save fails
-    async def _process_with_fallback(self, blob: bytes, images_dir: str, v, flow):
-        """Fallback processing when file operations fail."""
+    # // ---> on_message > [_process_with_fallback] > handle fallback when extraction fails
+    async def _process_with_fallback(self, blob: bytes, doc_id: str, v, flow):
+        """Fallback processing when python-docx fails."""
         processed_hashes: Set[str] = set()
-        images = self._extract_images_from_zip(blob, images_dir, processed_hashes)
+        images = self._extract_images_from_zip(blob, doc_id, processed_hashes)
 
         if images:
             logger.info(f"Fallback: Extracted {len(images)} images")
             all_images = [
-                {"path": p, "context": f"Image {i+1} ({name})", "paragraph_index": None}
-                for i, (p, name) in enumerate(images)
+                {
+                    "data": img["data"],
+                    "content_type": img["content_type"],
+                    "context": f"Image {i+1} ({img['original_name']})",
+                    "paragraph_index": None
+                }
+                for i, img in enumerate(images)
             ]
-            descriptions = await self._describe_images_concurrent(all_images)
+            descriptions = await self._describe_images_concurrent_bytes(all_images, doc_id)
 
             for img_info, desc in zip(all_images, descriptions):
                 if desc:
@@ -310,25 +303,22 @@ class Processor(FlowProcessor):
 
     # // ---> [_is_docx] > check if blob is a DOCX file
     def _is_docx(self, blob: bytes, content_type: Optional[str] = None) -> bool:
-        """Check if blob is a DOCX file by content_type or magic bytes."""
-        if content_type:
-            ct_lower = content_type.strip().lower()
-            if ct_lower in (
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                "application/msword"
-            ):
-                return True
+        """Check if blob is a DOCX file by verifying actual file content (magic bytes + ZIP structure)."""
+        # DOCX files are ZIP archives starting with PK - ALWAYS check magic bytes first
+        if len(blob) < 4 or blob[:4] != b'PK\x03\x04':
+            # Not a ZIP file, so not a DOCX
+            if content_type:
+                logger.debug(f"File has content_type={content_type} but is not a ZIP archive (not DOCX)")
+            return False
 
-        # DOCX files are ZIP archives starting with PK
-        if len(blob) >= 4 and blob[:4] == b'PK\x03\x04':
-            # Further verify it's a DOCX by checking for word/ directory
-            try:
-                with zipfile.ZipFile(BytesIO(blob), 'r') as zf:
-                    names = zf.namelist()
-                    if any(name.startswith('word/') for name in names):
-                        return True
-            except Exception:
-                pass
+        # Further verify it's a DOCX by checking for word/ directory
+        try:
+            with zipfile.ZipFile(BytesIO(blob), 'r') as zf:
+                names = zf.namelist()
+                if any(name.startswith('word/') for name in names):
+                    return True
+        except Exception:
+            pass
 
         return False
 
@@ -338,17 +328,23 @@ class Processor(FlowProcessor):
 
     # // ---> [_extract_images_from_zip] > fallback extraction via zipfile
     def _extract_images_from_zip(
-        self, blob: bytes, images_dir: str, processed_hashes: Set[str]
-    ) -> List[Tuple[str, str]]:
+        self, blob: bytes, doc_id: str, processed_hashes: Set[str]
+    ) -> List[Dict[str, Any]]:
         """
         Extract images directly from DOCX ZIP archive.
-        Returns list of (saved_path, original_name) tuples.
+        Returns list of dicts with image data, content_type, and original_name.
         Works even when python-docx can't parse the file.
         """
-        saved = []
+        extracted = []
         image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp'}
         # EMF/WMF are Windows metafiles - we'll try to handle them
         metafile_extensions = {'.emf', '.wmf'}
+        
+        ext_to_content_type = {
+            '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif', '.bmp': 'image/bmp', '.tiff': 'image/tiff',
+            '.webp': 'image/webp'
+        }
 
         try:
             with zipfile.ZipFile(BytesIO(blob), 'r') as zf:
@@ -385,11 +381,13 @@ class Processor(FlowProcessor):
                                     logger.debug(f"Skipping unconvertible metafile: {name}")
                                     continue
 
-                            filename = f"zip_{len(saved)}{ext}"
-                            path = os.path.join(images_dir, filename)
-                            with open(path, 'wb') as f:
-                                f.write(image_data)
-                            saved.append((path, original_name))
+                            content_type = ext_to_content_type.get(ext, 'image/png')
+                            extracted.append({
+                                "data": image_data,
+                                "content_type": content_type,
+                                "original_name": original_name,
+                                "filename": f"zip_{len(extracted)}{ext}"
+                            })
                             logger.debug(f"Extracted from ZIP: {original_name}")
 
                         except Exception as e:
@@ -400,7 +398,7 @@ class Processor(FlowProcessor):
         except Exception as e:
             logger.warning(f"ZIP extraction failed: {e}")
 
-        return saved
+        return extracted
 
     # // ---> [_try_convert_metafile] > convert EMF/WMF to PNG
     def _try_convert_metafile(self, data: bytes) -> Optional[bytes]:
@@ -417,9 +415,9 @@ class Processor(FlowProcessor):
 
     # // ---> [_extract_structured_docx] > parse DOCX with python-docx
     def _extract_structured_docx(
-        self, doc, images_dir: str, processed_hashes: Set[str]
+        self, doc, doc_id: str, processed_hashes: Set[str]
     ) -> Dict[str, Any]:
-        """Extract all content from DOCX using python-docx."""
+        """Extract all content from DOCX using python-docx. Images stored as bytes."""
         structured_data = {
             "document": {
                 "paragraphs": [],
@@ -448,7 +446,7 @@ class Processor(FlowProcessor):
         for para_idx, paragraph in enumerate(doc.paragraphs):
             try:
                 para_data = self._extract_paragraph_data(
-                    paragraph, para_idx, images_dir, processed_hashes, image_counter
+                    paragraph, para_idx, processed_hashes, image_counter
                 )
                 if para_data["text"] or para_data.get("images"):
                     structured_data["document"]["paragraphs"].append(para_data)
@@ -475,7 +473,7 @@ class Processor(FlowProcessor):
                         for para in cell.paragraphs:
                             try:
                                 para_images = self._extract_paragraph_images(
-                                    para, images_dir, processed_hashes, image_counter
+                                    para, processed_hashes, image_counter
                                 )
                                 for img_info in para_images:
                                     img_info["table_index"] = table_idx
@@ -489,7 +487,7 @@ class Processor(FlowProcessor):
 
         # Also extract images from document's inline shapes (relationship-based extraction)
         try:
-            doc_images = self._extract_document_images(doc, images_dir, processed_hashes, image_counter)
+            doc_images = self._extract_document_images(doc, processed_hashes, image_counter)
             for img_info in doc_images:
                 structured_data["document"]["images"].append(img_info)
         except Exception as e:
@@ -499,10 +497,10 @@ class Processor(FlowProcessor):
 
     # // ---> [_extract_paragraph_data] > extract content from a single paragraph
     def _extract_paragraph_data(
-        self, paragraph, para_idx: int, images_dir: str,
+        self, paragraph, para_idx: int,
         processed_hashes: Set[str], image_counter: int
     ) -> Dict[str, Any]:
-        """Extract text and images from a paragraph."""
+        """Extract text and images from a paragraph. Images stored as bytes."""
         para_data = {
             "paragraph_index": para_idx,
             "text": "",
@@ -525,18 +523,18 @@ class Processor(FlowProcessor):
         except Exception:
             pass
 
-        # Extract inline images from runs
+        # Extract inline images from runs (returns bytes)
         para_data["images"] = self._extract_paragraph_images(
-            paragraph, images_dir, processed_hashes, image_counter
+            paragraph, processed_hashes, image_counter
         )
 
         return para_data
 
     # // ---> [_extract_paragraph_images] > extract images from paragraph runs
     def _extract_paragraph_images(
-        self, paragraph, images_dir: str, processed_hashes: Set[str], counter: int
+        self, paragraph, processed_hashes: Set[str], counter: int
     ) -> List[Dict]:
-        """Extract images from paragraph's inline shapes."""
+        """Extract images from paragraph's inline shapes. Returns bytes data."""
         images = []
 
         try:
@@ -570,7 +568,7 @@ class Processor(FlowProcessor):
                                                 continue
                                             processed_hashes.add(img_hash)
 
-                                            # Determine extension
+                                            # Determine content type and extension
                                             content_type = getattr(part, 'content_type', 'image/png')
                                             ext = self._content_type_to_ext(content_type)
 
@@ -579,19 +577,17 @@ class Processor(FlowProcessor):
                                                 converted = self._try_convert_metafile(image_bytes)
                                                 if converted:
                                                     image_bytes = converted
+                                                    content_type = 'image/png'
                                                     ext = '.png'
                                                 else:
                                                     continue
 
                                             filename = f"para_{counter + len(images)}{ext}"
-                                            path = os.path.join(images_dir, filename)
-
-                                            with open(path, 'wb') as f:
-                                                f.write(image_bytes)
 
                                             images.append({
                                                 "filename": filename,
-                                                "path": path
+                                                "data": image_bytes,
+                                                "content_type": content_type
                                             })
                                             logger.debug(f"Extracted inline image: {filename}")
                                     except Exception as e:
@@ -607,9 +603,9 @@ class Processor(FlowProcessor):
 
     # // ---> [_extract_document_images] > extract all images from document relationships
     def _extract_document_images(
-        self, doc, images_dir: str, processed_hashes: Set[str], counter: int
+        self, doc, processed_hashes: Set[str], counter: int
     ) -> List[Dict]:
-        """Extract images using document part relationships as fallback."""
+        """Extract images using document part relationships as fallback. Returns bytes data."""
         images = []
 
         try:
@@ -631,7 +627,7 @@ class Processor(FlowProcessor):
                                 continue
                             processed_hashes.add(img_hash)
 
-                            # Determine extension
+                            # Determine content type and extension
                             content_type = getattr(part, 'content_type', 'image/png')
                             ext = self._content_type_to_ext(content_type)
 
@@ -640,19 +636,17 @@ class Processor(FlowProcessor):
                                 converted = self._try_convert_metafile(image_bytes)
                                 if converted:
                                     image_bytes = converted
+                                    content_type = 'image/png'
                                     ext = '.png'
                                 else:
                                     continue
 
                             filename = f"doc_{counter + len(images)}{ext}"
-                            path = os.path.join(images_dir, filename)
-
-                            with open(path, 'wb') as f:
-                                f.write(image_bytes)
 
                             images.append({
                                 "filename": filename,
-                                "path": path
+                                "data": image_bytes,
+                                "content_type": content_type
                             })
                             logger.debug(f"Extracted document image: {filename}")
 
@@ -792,51 +786,46 @@ class Processor(FlowProcessor):
 
         return "\n".join(parts)
 
-    # // ---> [_image_to_base64] > convert image to base64 data URL
-    def _image_to_base64(self, image_path: str) -> Optional[str]:
-        """Convert image file to base64 data URL for vLLM."""
-        try:
-            with open(image_path, "rb") as f:
-                data = f.read()
+    # // ---> [_bytes_to_base64_data_url] > convert image bytes to base64 data URL
+    def _bytes_to_base64_data_url(self, image_bytes: bytes, content_type: str = "image/png") -> str:
+        """Convert image bytes to base64 data URL for vLLM."""
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        return f"data:{content_type};base64,{b64}"
 
-            if len(data) > MAX_IMAGE_SIZE_MB * 1024 * 1024:
-                logger.warning(f"Image too large for vLLM: {image_path}")
-                return None
-
-            b64 = base64.b64encode(data).decode("utf-8")
-            ext = Path(image_path).suffix.lower()
-            mime_types = {
-                ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-                ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp"
-            }
-            mime = mime_types.get(ext, "image/png")
-            return f"data:{mime};base64,{b64}"
-        except Exception as e:
-            logger.error(f"Failed to encode image: {e}")
-            return None
-
-    # // ---> [_describe_images_concurrent] > concurrent vLLM requests
-    async def _describe_images_concurrent(self, images: List[Dict]) -> List[str]:
+    # // ---> [_describe_images_concurrent_bytes] > concurrent vLLM requests with bytes
+    async def _describe_images_concurrent_bytes(self, images: List[Dict], doc_id: str) -> List[str]:
         """
         Describe images using concurrent vLLM requests.
+        Also saves images to MinIO storage.
         Processes up to MAX_CONCURRENT_VLLM_REQUESTS in parallel.
         """
         if not images:
             return []
 
-        # Filter valid images
-        valid_images = [img for img in images if os.path.exists(img["path"])]
+        # Filter valid images (must have data)
+        valid_images = [img for img in images if img.get("data")]
         if not valid_images:
             return [""] * len(images)
 
         logger.info(f"Processing {len(valid_images)} images concurrently")
 
-        loop = asyncio.get_event_loop()
+        # Use get_running_loop() for Python 3.10+ compatibility
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_CONCURRENT_VLLM_REQUESTS) as executor:
             futures = [
-                loop.run_in_executor(executor, self._describe_single_image, img["path"])
-                for img in valid_images
+                loop.run_in_executor(
+                    executor,
+                    self._describe_and_save_image,
+                    img["data"],
+                    img.get("content_type", "image/png"),
+                    doc_id,
+                    idx
+                )
+                for idx, img in enumerate(valid_images)
             ]
             results = await asyncio.gather(*futures, return_exceptions=True)
 
@@ -851,13 +840,32 @@ class Processor(FlowProcessor):
 
         return descriptions
 
-    # // ---> [_describe_single_image] > single vLLM request
-    def _describe_single_image(self, image_path: str) -> str:
-        """Describe a single image using vLLM."""
+    # // ---> [_describe_and_save_image] > save to MinIO and describe via vLLM
+    def _describe_and_save_image(
+        self, image_bytes: bytes, content_type: str, doc_id: str, image_idx: int
+    ) -> str:
+        """Save image to MinIO and describe using vLLM."""
         try:
-            image_url = self._image_to_base64(image_path)
-            if not image_url:
-                return "Image could not be processed."
+            # Determine extension from content type
+            ext_map = {
+                'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif',
+                'image/bmp': '.bmp', 'image/webp': '.webp'
+            }
+            ext = ext_map.get(content_type, '.png')
+            filename = f"image_{image_idx}{ext}"
+            
+            # Save to MinIO
+            object_name = self.minio_storage.save_image(
+                doc_id=doc_id,
+                filename=filename,
+                image_data=image_bytes,
+                content_type=content_type
+            )
+            if object_name:
+                logger.debug(f"Saved image to MinIO: {object_name}")
+            
+            # Describe via vLLM
+            image_url = self._bytes_to_base64_data_url(image_bytes, content_type)
 
             payload = {
                 "model": self.vllm_model,
@@ -914,10 +922,10 @@ class Processor(FlowProcessor):
             return ""
 
         except requests.exceptions.Timeout:
-            logger.error(f"vLLM request timed out for {image_path}")
+            logger.error("vLLM request timed out")
             return "Description unavailable (timeout)"
         except requests.exceptions.ConnectionError as e:
-            logger.error(f"vLLM connection error for {image_path}: {e}")
+            logger.error(f"vLLM connection error: {e}")
             return "Description unavailable (connection error)"
         except Exception as e:
             logger.error(f"vLLM error: {e}")

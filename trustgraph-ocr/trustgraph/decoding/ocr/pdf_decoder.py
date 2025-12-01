@@ -2,13 +2,16 @@
 """
 Simple decoder, accepts PDF documents on input, outputs pages from the
 PDF document as text as separate output objects.
+
+Images are stored in MinIO object storage for persistence and sharing
+with vLLM container via mounted volume.
 """
 
-import tempfile
 import base64
 import logging
 import os
 import re
+from io import BytesIO
 from pathlib import Path
 from pdf2image import convert_from_bytes
 import requests
@@ -16,6 +19,7 @@ import json
 
 from ... schema import Document, TextDocument, Metadata
 from ... base import FlowProcessor, ConsumerSpec, ProducerSpec
+from .minio_storage import MinioStorage, get_minio_storage
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -39,10 +43,9 @@ class Processor(FlowProcessor):
             "vllm_model",
             "Qwen/Qwen3-VL-4B-Instruct"
         )
-        self.files_base_dir = params.get(
-            "files_base_dir",
-            "/root/files_to_parse"
-        )
+        
+        # Initialize MinIO storage for image persistence
+        self.minio_storage = get_minio_storage()
 
         super(Processor, self).__init__(
             **params | {
@@ -67,41 +70,73 @@ class Processor(FlowProcessor):
 
         logger.info("PDF image extraction + vLLM description processor initialized")
 
-    # // ---> Pulsar consumer(input) > [on_message] > save page images, vLLM describe -> flow('output')
+    # // ---> Pulsar consumer(input) > [on_message] > save page images to MinIO, vLLM describe -> flow('output')
     async def on_message(self, msg, consumer, flow):
 
         logger.info("PDF message received for image extraction")
 
         v = msg.value()
+        doc_id = v.metadata.id
 
-        logger.info(f"Processing {v.metadata.id}...")
+        logger.info(f"Processing {doc_id}...")
 
         blob = base64.b64decode(v.data)
 
         # Check if this is a PDF file (magic bytes: %PDF)
         if not self._is_pdf(blob):
-            logger.info(f"Skipping non-PDF file: {v.metadata.id}")
+            logger.info(f"Skipping non-PDF file: {doc_id}")
             return
 
-        # Prepare output directory for this document
-        doc_dir = os.path.join(self.files_base_dir, self._safe_id(v.metadata.id))
-        os.makedirs(doc_dir, exist_ok=True)
+        # Initialize MinIO storage
+        if not self.minio_storage.initialize():
+            logger.error("Failed to initialize MinIO storage - cannot process PDF")
+            return
+
+        # Save original PDF document to MinIO
+        pdf_filename = f"{self._safe_id(doc_id)}.pdf"
+        doc_object_name = self.minio_storage.save_document(
+            doc_id=doc_id,
+            filename=pdf_filename,
+            document_data=blob,
+            content_type="application/pdf"
+        )
+        if doc_object_name:
+            logger.info(f"Saved original PDF to MinIO: {doc_object_name}")
+        else:
+            logger.warning("Failed to save original PDF to MinIO, continuing with processing")
 
         pages = convert_from_bytes(blob)
 
         for ix, page in enumerate(pages):
-
-            image_path = os.path.join(doc_dir, f"page_{ix + 1}.png")
+            filename = f"page_{ix + 1}.png"
+            
             try:
-                # Save page render as image
-                page.save(image_path, "PNG")
-                logger.debug(f"Saved page image: {image_path}")
+                # Convert PIL image to bytes
+                img_buffer = BytesIO()
+                page.save(img_buffer, "PNG")
+                img_bytes = img_buffer.getvalue()
+                
+                # Save to MinIO storage
+                object_name = self.minio_storage.save_image(
+                    doc_id=doc_id,
+                    filename=filename,
+                    image_data=img_bytes,
+                    content_type="image/png"
+                )
+                
+                if object_name:
+                    local_path = self.minio_storage.get_local_path(object_name)
+                    logger.debug(f"Saved page image to MinIO: {object_name} (local: {local_path})")
+                else:
+                    logger.warning(f"Failed saving page image {ix + 1} to MinIO")
+                    continue
+                    
             except Exception as e:
                 logger.warning(f"Failed saving page image {ix + 1}: {e}")
                 continue
 
-            # Describe image via vLLM
-            description = self._describe_image_with_vllm(image_path)
+            # Describe image via vLLM using the image bytes directly
+            description = self._describe_image_with_vllm_bytes(img_bytes, "image/png")
             page_text = f"Page {ix + 1} Image Description:\n{description}\n"
 
             r = TextDocument(
@@ -129,43 +164,34 @@ class Processor(FlowProcessor):
             return "unknown"
         return re.sub(r"[^A-Za-z0-9._-]+", "_", str(value))
 
-    # // ---> on_message > [_image_to_base64_data_url] > reads image file, returns data:image/... URL
-    def _image_to_base64_data_url(self, image_path: str) -> str:
+    # // ---> on_message > [_bytes_to_base64_data_url] > convert image bytes to data:image/... URL
+    def _bytes_to_base64_data_url(self, image_bytes: bytes, content_type: str = "image/png") -> str:
         """
-        Convert an image file to a base64 data URL.
-        This is required because vLLM runs in a separate container and cannot
-        access file:// paths from this container's filesystem.
+        Convert image bytes to a base64 data URL.
         """
-        with open(image_path, "rb") as f:
-            img_data = base64.b64encode(f.read()).decode("utf-8")
-        
-        # Detect MIME type from extension
-        ext = Path(image_path).suffix.lower()
-        mime_map = {
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".gif": "image/gif",
-            ".webp": "image/webp",
-        }
-        mime_type = mime_map.get(ext, "image/png")
-        
-        return f"data:{mime_type};base64,{img_data}"
+        img_data = base64.b64encode(image_bytes).decode("utf-8")
+        return f"data:{content_type};base64,{img_data}"
 
-    # // ---> on_message > [_describe_image_with_vllm] > POST to vLLM, returns description text
-    def _describe_image_with_vllm(self, image_path: str) -> str:
+    # // ---> on_message > [_describe_image_with_vllm_bytes] > POST to vLLM with image bytes, returns description
+    def _describe_image_with_vllm_bytes(self, image_bytes: bytes, content_type: str = "image/png") -> str:
+        """
+        Describe an image using vLLM by sending image bytes as base64.
+        
+        Args:
+            image_bytes: Raw image bytes
+            content_type: MIME type of the image
+            
+        Returns:
+            Text description of the image
+        """
         try:
-            # Convert image to base64 data URL instead of file:// path.
-            # CRITICAL: vLLM runs in a separate container and cannot access
-            # file:// paths from this container's filesystem. Using file:// causes
-            # vLLM to fail with "No valid structured output parameter found" because
-            # the malformed request triggers an incorrect code path in vLLM v1.
-            logger.debug(f"Converting image to base64: {image_path}")
+            # Convert image bytes to base64 data URL
+            logger.debug(f"Converting image bytes to base64 ({len(image_bytes)} bytes)")
             try:
-                image_url = self._image_to_base64_data_url(image_path)
+                image_url = self._bytes_to_base64_data_url(image_bytes, content_type)
                 logger.debug(f"Base64 image URL created, length: {len(image_url)} chars")
             except Exception as e:
-                logger.error(f"Failed to encode image {image_path} to base64: {e}")
+                logger.error(f"Failed to encode image to base64: {e}")
                 return "Description unavailable (image encoding failed)."
 
             # NOTE: Do NOT include "response_format" parameter for plain text responses.
@@ -234,13 +260,13 @@ class Processor(FlowProcessor):
                 return "\n".join([t for t in texts if t]).strip() or "No description returned."
             return "No description returned."
         except requests.exceptions.Timeout:
-            logger.error(f"vLLM request timed out for {image_path}")
+            logger.error("vLLM request timed out")
             return "Description unavailable (timeout)."
         except requests.exceptions.ConnectionError as e:
-            logger.error(f"vLLM connection error for {image_path}: {e}")
+            logger.error(f"vLLM connection error: {e}")
             return "Description unavailable (connection error)."
         except Exception as e:
-            logger.error(f"vLLM request failed for {image_path}: {type(e).__name__}: {e}")
+            logger.error(f"vLLM request failed: {type(e).__name__}: {e}")
             return "Description unavailable."
 
 def run():

@@ -10,6 +10,7 @@ Key features:
 - Image deduplication by MD5 hash to avoid redundant LLM calls
 - Robust error handling that continues processing even if parts fail
 - Extracts text, tables, speaker notes, and images
+- Images stored in MinIO for persistence
 
 Reference: https://python-pptx.readthedocs.io/en/latest/api/presentation.html
 """
@@ -31,6 +32,7 @@ from typing import Dict, List, Any, Optional, Set, Tuple
 
 from ... schema import Document as TGDocument, TextDocument
 from ... base import FlowProcessor, ConsumerSpec, ProducerSpec
+from .minio_storage import MinioStorage, get_minio_storage
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -82,10 +84,9 @@ class Processor(FlowProcessor):
             "vllm_model",
             "Qwen/Qwen3-VL-4B-Instruct"
         )
-        self.files_base_dir = params.get(
-            "files_base_dir",
-            "/root/files_to_parse"
-        )
+        
+        # Initialize MinIO storage for image persistence
+        self.minio_storage = get_minio_storage()
 
         super(Processor, self).__init__(
             **params | {"id": id}
@@ -119,33 +120,34 @@ class Processor(FlowProcessor):
             logger.info("PPTX message received for extraction")
 
             v = msg.value()
-            logger.info(f"Processing {v.metadata.id}...")
+            doc_id = v.metadata.id
+            logger.info(f"Processing {doc_id}...")
 
             blob = base64.b64decode(v.data)
 
             # Check if this is a PPTX file
             content_type = getattr(v, "content_type", None)
             if not self._is_pptx(blob, content_type):
-                logger.info(f"Skipping non-PPTX file: {v.metadata.id} (content_type: {content_type})")
+                logger.info(f"Skipping non-PPTX file: {doc_id} (content_type: {content_type})")
                 return
 
-            # Prepare output directories
-            doc_dir = os.path.join(self.files_base_dir, self._safe_id(v.metadata.id))
-            os.makedirs(doc_dir, exist_ok=True)
-            images_dir = os.path.join(doc_dir, "images")
-            os.makedirs(images_dir, exist_ok=True)
-
-            # Save PPTX to file
-            temp_pptx_path = os.path.join(doc_dir, "source.pptx")
-            try:
-                with open(temp_pptx_path, "wb") as f:
-                    f.write(blob)
-                logger.debug(f"Saved PPTX to file: {temp_pptx_path}")
-            except Exception as e:
-                logger.error(f"Failed to save PPTX to file: {e}")
-                # Try in-memory fallback
-                await self._process_with_fallback(blob, images_dir, v, flow)
+            # Initialize MinIO storage
+            if not self.minio_storage.initialize():
+                logger.error("Failed to initialize MinIO storage - cannot process PPTX")
                 return
+
+            # Save original PPTX document to MinIO
+            pptx_filename = f"{self._safe_id(doc_id)}.pptx"
+            doc_object_name = self.minio_storage.save_document(
+                doc_id=doc_id,
+                filename=pptx_filename,
+                document_data=blob,
+                content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            )
+            if doc_object_name:
+                logger.info(f"Saved original PPTX to MinIO: {doc_object_name}")
+            else:
+                logger.warning("Failed to save original PPTX to MinIO, continuing with processing")
 
             # Track processed image hashes for deduplication
             processed_hashes: Set[str] = set()
@@ -156,17 +158,18 @@ class Processor(FlowProcessor):
             # Try python-pptx extraction
             if PPTX_AVAILABLE:
                 pptx_success, structured_data, all_images = self._try_pptx_extraction(
-                    temp_pptx_path, blob, images_dir, processed_hashes
+                    blob, doc_id, processed_hashes
                 )
 
             # Fallback to zipfile extraction if python-pptx failed
             if not pptx_success:
                 logger.info("Using zipfile fallback extraction")
-                fallback_images = self._extract_images_from_zip(blob, images_dir, processed_hashes)
-                for ix, (image_path, original_name) in enumerate(fallback_images):
+                fallback_images = self._extract_images_from_zip(blob, doc_id, processed_hashes)
+                for ix, img_info in enumerate(fallback_images):
                     all_images.append({
-                        "path": image_path,
-                        "context": f"Image {ix + 1} ({original_name})",
+                        "data": img_info["data"],
+                        "content_type": img_info["content_type"],
+                        "context": f"Image {ix + 1} ({img_info['original_name']})",
                         "slide_number": None,
                         "shape_index": None
                     })
@@ -210,7 +213,7 @@ class Processor(FlowProcessor):
             # Process images with concurrent vLLM requests
             if all_images:
                 logger.info(f"Processing {len(all_images)} unique images with concurrent vLLM requests")
-                image_descriptions = await self._describe_images_concurrent(all_images)
+                image_descriptions = await self._describe_images_concurrent_bytes(all_images, doc_id)
 
                 # Send image descriptions
                 for idx, (img_info, description) in enumerate(zip(all_images, image_descriptions)):
@@ -234,30 +237,32 @@ class Processor(FlowProcessor):
 
     # // ---> on_message > [_try_pptx_extraction] > extract using python-pptx with fallback
     def _try_pptx_extraction(
-        self, pptx_path: str, blob: bytes, images_dir: str, processed_hashes: Set[str]
+        self, blob: bytes, doc_id: str, processed_hashes: Set[str]
     ) -> Tuple[bool, Optional[Dict], List[Dict]]:
         """
         Try to extract content using python-pptx.
         Falls back to zipfile if python-pptx fails completely.
+        Images are stored in memory with bytes data for MinIO upload.
         """
         all_images = []
         structured_data = None
 
         try:
-            # Try loading from file first
-            logger.debug("Trying python-pptx load from file")
-            prs = Presentation(pptx_path)
+            # Load from bytes (in-memory)
+            logger.debug("Trying python-pptx load from bytes")
+            prs = Presentation(BytesIO(blob))
             logger.info(f"python-pptx loaded successfully: {len(prs.slides)} slides")
 
             # Extract all content
-            structured_data = self._extract_structured_pptx(prs, images_dir, processed_hashes)
+            structured_data = self._extract_structured_pptx(prs, doc_id, processed_hashes)
             logger.info(f"Extracted {structured_data['presentation']['total_slides']} slides")
 
-            # Collect slide images
+            # Collect slide images with bytes data
             for slide_data in structured_data["presentation"]["slides"]:
                 for img_info in slide_data.get("images", []):
                     all_images.append({
-                        "path": img_info["path"],
+                        "data": img_info["data"],
+                        "content_type": img_info["content_type"],
                         "context": f"Slide {slide_data['slide_number']} - {img_info['filename']}",
                         "slide_number": slide_data["slide_number"],
                         "shape_index": img_info.get("shape_index")
@@ -266,44 +271,28 @@ class Processor(FlowProcessor):
             return True, structured_data, all_images
 
         except Exception as e:
-            logger.warning(f"python-pptx file load failed: {e}")
+            logger.warning(f"python-pptx load failed: {e}")
+            return False, None, []
 
-            # Try loading from bytes (in-memory)
-            try:
-                logger.debug("Trying python-pptx load from bytes")
-                prs = Presentation(BytesIO(blob))
-                logger.info(f"python-pptx loaded from bytes: {len(prs.slides)} slides")
-
-                structured_data = self._extract_structured_pptx(prs, images_dir, processed_hashes)
-
-                for slide_data in structured_data["presentation"]["slides"]:
-                    for img_info in slide_data.get("images", []):
-                        all_images.append({
-                            "path": img_info["path"],
-                            "context": f"Slide {slide_data['slide_number']} - {img_info['filename']}",
-                            "slide_number": slide_data["slide_number"],
-                            "shape_index": img_info.get("shape_index")
-                        })
-
-                return True, structured_data, all_images
-
-            except Exception as e2:
-                logger.warning(f"python-pptx bytes load also failed: {e2}")
-                return False, None, []
-
-    # // ---> on_message > [_process_with_fallback] > handle fallback when file save fails
-    async def _process_with_fallback(self, blob: bytes, images_dir: str, v, flow):
-        """Fallback processing when file operations fail."""
+    # // ---> on_message > [_process_with_fallback] > handle fallback when extraction fails
+    async def _process_with_fallback(self, blob: bytes, doc_id: str, v, flow):
+        """Fallback processing when python-pptx fails."""
         processed_hashes: Set[str] = set()
-        images = self._extract_images_from_zip(blob, images_dir, processed_hashes)
+        images = self._extract_images_from_zip(blob, doc_id, processed_hashes)
 
         if images:
             logger.info(f"Fallback: Extracted {len(images)} images")
             all_images = [
-                {"path": p, "context": f"Image {i+1} ({name})", "slide_number": None, "shape_index": None}
-                for i, (p, name) in enumerate(images)
+                {
+                    "data": img["data"],
+                    "content_type": img["content_type"],
+                    "context": f"Image {i+1} ({img['original_name']})",
+                    "slide_number": None,
+                    "shape_index": None
+                }
+                for i, img in enumerate(images)
             ]
-            descriptions = await self._describe_images_concurrent(all_images)
+            descriptions = await self._describe_images_concurrent_bytes(all_images, doc_id)
 
             for img_info, desc in zip(all_images, descriptions):
                 if desc:
@@ -328,23 +317,13 @@ class Processor(FlowProcessor):
     # // ---> [_is_pptx] > check if blob is a PPTX file
     def _is_pptx(self, blob: bytes, content_type: Optional[str] = None) -> bool:
         """
-        Check if blob is a PPTX file by content_type or by inspecting ZIP contents.
-        More accurate than just checking ZIP magic bytes (which would match DOCX/XLSX too).
+        Check if blob is a PPTX file by verifying actual file content (magic bytes + ZIP structure).
+        ALWAYS checks magic bytes first, regardless of content_type.
         """
-        # Check content_type first (most reliable when available)
-        if content_type:
-            ct_lower = content_type.strip().lower()
-            if ct_lower in (
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                "application/vnd.ms-powerpoint"
-            ):
-                return True
-            # Explicitly skip DOCX/XLSX content types
-            if "word" in ct_lower or "spreadsheet" in ct_lower or "excel" in ct_lower:
-                return False
-
-        # Check ZIP magic bytes first
+        # PPTX files are ZIP archives - ALWAYS check magic bytes first
         if len(blob) < 4 or blob[:4] != b'PK\x03\x04':
+            if content_type:
+                logger.debug(f"File has content_type={content_type} but is not a ZIP archive (not PPTX)")
             return False
 
         # Inspect ZIP contents to distinguish PPTX from DOCX/XLSX
@@ -372,17 +351,23 @@ class Processor(FlowProcessor):
 
     # // ---> [_extract_images_from_zip] > fallback extraction via zipfile
     def _extract_images_from_zip(
-        self, blob: bytes, images_dir: str, processed_hashes: Set[str]
-    ) -> List[Tuple[str, str]]:
+        self, blob: bytes, doc_id: str, processed_hashes: Set[str]
+    ) -> List[Dict[str, Any]]:
         """
         Extract images directly from PPTX ZIP archive.
-        Returns list of (saved_path, original_name) tuples.
+        Returns list of dicts with image data, content_type, and original_name.
         Works even when python-pptx can't parse the file.
         """
-        saved = []
+        extracted = []
         image_extensions = {'.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff', '.webp'}
         # EMF/WMF are Windows metafiles - we'll try to handle them
         metafile_extensions = {'.emf', '.wmf'}
+        
+        ext_to_content_type = {
+            '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif', '.bmp': 'image/bmp', '.tiff': 'image/tiff',
+            '.webp': 'image/webp'
+        }
 
         try:
             with zipfile.ZipFile(BytesIO(blob), 'r') as zf:
@@ -419,11 +404,13 @@ class Processor(FlowProcessor):
                                     logger.debug(f"Skipping unconvertible metafile: {name}")
                                     continue
 
-                            filename = f"zip_{len(saved)}{ext}"
-                            path = os.path.join(images_dir, filename)
-                            with open(path, 'wb') as f:
-                                f.write(image_data)
-                            saved.append((path, original_name))
+                            content_type = ext_to_content_type.get(ext, 'image/png')
+                            extracted.append({
+                                "data": image_data,
+                                "content_type": content_type,
+                                "original_name": original_name,
+                                "filename": f"zip_{len(extracted)}{ext}"
+                            })
                             logger.debug(f"Extracted from ZIP: {original_name}")
 
                         except Exception as e:
@@ -434,7 +421,7 @@ class Processor(FlowProcessor):
         except Exception as e:
             logger.warning(f"ZIP extraction failed: {e}")
 
-        return saved
+        return extracted
 
     # // ---> [_try_convert_metafile] > convert EMF/WMF to PNG
     def _try_convert_metafile(self, data: bytes) -> Optional[bytes]:
@@ -451,9 +438,9 @@ class Processor(FlowProcessor):
 
     # // ---> [_extract_structured_pptx] > parse PPTX with python-pptx
     def _extract_structured_pptx(
-        self, prs, images_dir: str, processed_hashes: Set[str]
+        self, prs, doc_id: str, processed_hashes: Set[str]
     ) -> Dict[str, Any]:
-        """Extract all content from PPTX using python-pptx."""
+        """Extract all content from PPTX using python-pptx. Images stored as bytes."""
         structured_data = {
             "presentation": {
                 "total_slides": len(prs.slides),
@@ -481,7 +468,7 @@ class Processor(FlowProcessor):
         for slide_idx, slide in enumerate(prs.slides):
             try:
                 slide_data = self._extract_slide_data(
-                    slide, slide_idx, images_dir, processed_hashes, image_counter
+                    slide, slide_idx, processed_hashes, image_counter
                 )
                 image_counter += len(slide_data.get("images", []))
                 structured_data["presentation"]["slides"].append(slide_data)
@@ -497,10 +484,10 @@ class Processor(FlowProcessor):
 
     # // ---> [_extract_slide_data] > extract all content from a single slide
     def _extract_slide_data(
-        self, slide, slide_idx: int, images_dir: str,
+        self, slide, slide_idx: int,
         processed_hashes: Set[str], image_counter: int
     ) -> Dict[str, Any]:
-        """Extract all content from a single slide."""
+        """Extract all content from a single slide. Images stored as bytes."""
         slide_data = {
             "slide_number": slide_idx + 1,
             "slide_id": None,
@@ -533,7 +520,7 @@ class Processor(FlowProcessor):
         for shape_idx, shape in enumerate(slide.shapes):
             try:
                 shape_data, new_images = self._extract_shape_data(
-                    shape, shape_idx, slide_idx, images_dir,
+                    shape, shape_idx, slide_idx,
                     processed_hashes, image_counter + local_img_counter
                 )
                 slide_data["shapes"].append(shape_data)
@@ -567,10 +554,10 @@ class Processor(FlowProcessor):
 
     # // ---> [_extract_shape_data] > extract content from a single shape
     def _extract_shape_data(
-        self, shape, shape_idx: int, slide_idx: int, images_dir: str,
+        self, shape, shape_idx: int, slide_idx: int,
         processed_hashes: Set[str], image_counter: int
     ) -> Tuple[Dict[str, Any], List[Dict]]:
-        """Extract all content from a shape. Returns (shape_data, list of images)."""
+        """Extract all content from a shape. Returns (shape_data, list of images with bytes)."""
         shape_data = {
             "shape_index": shape_idx,
             "shape_type": None,
@@ -608,18 +595,18 @@ class Processor(FlowProcessor):
         # Extract image if shape is a picture
         try:
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
-                img_path = self._extract_picture(
-                    shape, slide_idx, images_dir, processed_hashes, image_counter
+                img_info = self._extract_picture(
+                    shape, slide_idx, processed_hashes, image_counter
                 )
-                if img_path:
-                    img_filename = os.path.basename(img_path)
+                if img_info:
                     images.append({
                         "shape_index": shape_idx,
-                        "filename": img_filename,
-                        "path": img_path
+                        "filename": img_info["filename"],
+                        "data": img_info["data"],
+                        "content_type": img_info["content_type"]
                     })
                     # Add image reference to shape data for shape summary
-                    shape_data["image_ref"] = img_filename
+                    shape_data["image_ref"] = img_info["filename"]
         except Exception as e:
             logger.debug(f"Picture extraction failed for shape {shape_idx}: {e}")
 
@@ -640,7 +627,7 @@ class Processor(FlowProcessor):
                     try:
                         child_data, child_images = self._extract_shape_data(
                             child_shape, f"{shape_idx}_{child_idx}", slide_idx,
-                            images_dir, processed_hashes, image_counter + len(images)
+                            processed_hashes, image_counter + len(images)
                         )
                         # Merge child text
                         if child_data.get("text"):
@@ -658,10 +645,10 @@ class Processor(FlowProcessor):
 
     # // ---> [_extract_picture] > extract image from Picture shape
     def _extract_picture(
-        self, shape, slide_idx: int, images_dir: str,
+        self, shape, slide_idx: int,
         processed_hashes: Set[str], counter: int
-    ) -> Optional[str]:
-        """Extract image from a Picture shape with deduplication."""
+    ) -> Optional[Dict[str, Any]]:
+        """Extract image from a Picture shape with deduplication. Returns bytes data."""
         try:
             # Get image blob from shape
             image = shape.image
@@ -679,7 +666,7 @@ class Processor(FlowProcessor):
                 return None
             processed_hashes.add(img_hash)
 
-            # Determine extension from content type
+            # Determine content type and extension
             content_type = image.content_type
             ext_map = {
                 'image/png': '.png',
@@ -698,19 +685,20 @@ class Processor(FlowProcessor):
                 converted = self._try_convert_metafile(image_bytes)
                 if converted:
                     image_bytes = converted
+                    content_type = 'image/png'
                     ext = '.png'
                 else:
                     # Skip unconvertible
                     return None
 
             filename = f"slide_{slide_idx + 1}_img_{counter}{ext}"
-            path = os.path.join(images_dir, filename)
-
-            with open(path, 'wb') as f:
-                f.write(image_bytes)
 
             logger.debug(f"Extracted picture: {filename}")
-            return path
+            return {
+                "filename": filename,
+                "data": image_bytes,
+                "content_type": content_type
+            }
 
         except Exception as e:
             logger.debug(f"Failed to extract picture: {e}")
@@ -841,41 +829,24 @@ class Processor(FlowProcessor):
 
         return "\n".join(parts)
 
-    # // ---> [_image_to_base64] > convert image to base64 data URL
-    def _image_to_base64(self, image_path: str) -> Optional[str]:
-        """Convert image file to base64 data URL for vLLM."""
-        try:
-            with open(image_path, "rb") as f:
-                data = f.read()
+    # // ---> [_bytes_to_base64_data_url] > convert image bytes to base64 data URL
+    def _bytes_to_base64_data_url(self, image_bytes: bytes, content_type: str = "image/png") -> str:
+        """Convert image bytes to base64 data URL for vLLM."""
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        return f"data:{content_type};base64,{b64}"
 
-            if len(data) > MAX_IMAGE_SIZE_MB * 1024 * 1024:
-                logger.warning(f"Image too large for vLLM: {image_path}")
-                return None
-
-            b64 = base64.b64encode(data).decode("utf-8")
-            ext = Path(image_path).suffix.lower()
-            mime_types = {
-                ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-                ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp"
-            }
-            mime = mime_types.get(ext, "image/png")
-            return f"data:{mime};base64,{b64}"
-        except Exception as e:
-            logger.error(f"Failed to encode image: {e}")
-            return None
-
-    # // ---> [_describe_images_concurrent] > concurrent vLLM requests
-    async def _describe_images_concurrent(self, images: List[Dict]) -> List[str]:
+    # // ---> [_describe_images_concurrent_bytes] > concurrent vLLM requests with bytes
+    async def _describe_images_concurrent_bytes(self, images: List[Dict], doc_id: str) -> List[str]:
         """
         Describe images using concurrent vLLM requests.
+        Also saves images to MinIO storage.
         Processes up to MAX_CONCURRENT_VLLM_REQUESTS in parallel.
-        Uses asyncio.get_running_loop() for Python 3.10+ compatibility.
         """
         if not images:
             return []
 
-        # Filter valid images
-        valid_images = [img for img in images if os.path.exists(img["path"])]
+        # Filter valid images (must have data)
+        valid_images = [img for img in images if img.get("data")]
         if not valid_images:
             return [""] * len(images)
 
@@ -889,8 +860,15 @@ class Processor(FlowProcessor):
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_CONCURRENT_VLLM_REQUESTS) as executor:
             futures = [
-                loop.run_in_executor(executor, self._describe_single_image, img["path"])
-                for img in valid_images
+                loop.run_in_executor(
+                    executor,
+                    self._describe_and_save_image,
+                    img["data"],
+                    img.get("content_type", "image/png"),
+                    doc_id,
+                    idx
+                )
+                for idx, img in enumerate(valid_images)
             ]
             results = await asyncio.gather(*futures, return_exceptions=True)
 
@@ -905,15 +883,34 @@ class Processor(FlowProcessor):
 
         return descriptions
 
-    # // ---> [_describe_single_image] > single vLLM request with retry
-    def _describe_single_image(self, image_path: str) -> str:
+    # // ---> [_describe_and_save_image] > save to MinIO and describe via vLLM with retry
+    def _describe_and_save_image(
+        self, image_bytes: bytes, content_type: str, doc_id: str, image_idx: int
+    ) -> str:
         """
-        Describe a single image using vLLM with retry logic for transient failures.
+        Save image to MinIO and describe using vLLM with retry logic.
         Retries on connection errors, timeouts, and 5xx server errors.
         """
-        image_url = self._image_to_base64(image_path)
-        if not image_url:
-            return "Image could not be processed."
+        # Determine extension from content type
+        ext_map = {
+            'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif',
+            'image/bmp': '.bmp', 'image/webp': '.webp'
+        }
+        ext = ext_map.get(content_type, '.png')
+        filename = f"image_{image_idx}{ext}"
+        
+        # Save to MinIO
+        object_name = self.minio_storage.save_image(
+            doc_id=doc_id,
+            filename=filename,
+            image_data=image_bytes,
+            content_type=content_type
+        )
+        if object_name:
+            logger.debug(f"Saved image to MinIO: {object_name}")
+        
+        # Describe via vLLM
+        image_url = self._bytes_to_base64_data_url(image_bytes, content_type)
 
         payload = {
             "model": self.vllm_model,

@@ -149,8 +149,15 @@ services:
           memory: 256M
     image: docker.io/trustgraph/trustgraph-flow:${TRUSTGRAPH_VERSION:-1.4.23}
     restart: on-failure:100
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_OCR_BUCKET:-ocr-images}
+      MINIO_SECURE: "false"
+      MINIO_LOCAL_MOUNT_PATH: /minio_data
     volumes:
-    - ${FILES_TO_PARSE_HOST_PATH:-/home/ubuntu/Github/trustgraph/files_to_parse}:/root/files_to_parse
+    - /minio-data:/minio_data
   document-rag:
     command:
     - document-rag
@@ -516,7 +523,7 @@ services:
     - 9001:9001
     restart: on-failure:100
     volumes:
-    - minio-data:/minio_data
+    - /minio-data:/minio_data
   nlp-query:
     command:
     - nlp-query
@@ -554,8 +561,15 @@ services:
       dockerfile: Containerfile.ocr.dev
     image: trustgraph-ocr-dev:latest
     restart: on-failure:100
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_OCR_BUCKET:-ocr-images}
+      MINIO_SECURE: "false"
+      MINIO_LOCAL_MOUNT_PATH: /minio_data
     volumes:
-      - ${FILES_TO_PARSE_HOST_PATH:-/home/ubuntu/Github/trustgraph/files_to_parse}:/root/files_to_parse
+      - /minio-data:/minio_data
       - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/test_vllm_endpoint.py:/root/test_vllm_endpoint.py:ro
       # Mount local code for live development without rebuilding
       - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-ocr/trustgraph:/src/trustgraph-ocr/trustgraph:ro
@@ -580,8 +594,15 @@ services:
       dockerfile: Containerfile.ocr.dev
     image: trustgraph-ocr-dev:latest
     restart: on-failure:100
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_OCR_BUCKET:-ocr-images}
+      MINIO_SECURE: "false"
+      MINIO_LOCAL_MOUNT_PATH: /minio_data
     volumes:
-      - ${FILES_TO_PARSE_HOST_PATH:-/home/ubuntu/Github/trustgraph/files_to_parse}:/root/files_to_parse
+      - /minio-data:/minio_data
       # Mount local code for live development without rebuilding
       - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-ocr/trustgraph:/src/trustgraph-ocr/trustgraph:ro
       - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-base/trustgraph:/src/trustgraph-base/trustgraph:ro
@@ -605,8 +626,15 @@ services:
       dockerfile: Containerfile.ocr.dev
     image: trustgraph-ocr-dev:latest
     restart: on-failure:100
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_OCR_BUCKET:-ocr-images}
+      MINIO_SECURE: "false"
+      MINIO_LOCAL_MOUNT_PATH: /minio_data
     volumes:
-      - ${FILES_TO_PARSE_HOST_PATH:-/home/ubuntu/Github/trustgraph/files_to_parse}:/root/files_to_parse
+      - /minio-data:/minio_data
       # Mount local code for live development without rebuilding
       - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-ocr/trustgraph:/src/trustgraph-ocr/trustgraph:ro
       - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-base/trustgraph:/src/trustgraph-base/trustgraph:ro
@@ -630,8 +658,15 @@ services:
       dockerfile: Containerfile.ocr.dev
     image: trustgraph-ocr-dev:latest
     restart: on-failure:100
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_OCR_BUCKET:-ocr-images}
+      MINIO_SECURE: "false"
+      MINIO_LOCAL_MOUNT_PATH: /minio_data
     volumes:
-      - ${FILES_TO_PARSE_HOST_PATH:-/home/ubuntu/Github/trustgraph/files_to_parse}:/root/files_to_parse
+      - /minio-data:/minio_data
       # Mount local code for live development without rebuilding
       - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-ocr/trustgraph:/src/trustgraph-ocr/trustgraph:ro
       - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-base/trustgraph:/src/trustgraph-base/trustgraph:ro
@@ -655,8 +690,15 @@ services:
       dockerfile: Containerfile.ocr.dev
     image: trustgraph-ocr-dev:latest
     restart: on-failure:100
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_OCR_BUCKET:-ocr-images}
+      MINIO_SECURE: "false"
+      MINIO_LOCAL_MOUNT_PATH: /minio_data
     volumes:
-      - ${FILES_TO_PARSE_HOST_PATH:-/home/ubuntu/Github/trustgraph/files_to_parse}:/root/files_to_parse
+      - /minio-data:/minio_data
       # Mount local code for live development without rebuilding
       - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-ocr/trustgraph:/src/trustgraph-ocr/trustgraph:ro
       - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-base/trustgraph:/src/trustgraph-base/trustgraph:ro
@@ -1030,7 +1072,7 @@ services:
     - --gpu-memory-utilization
     - ${VLLM_GPU_MEMORY_UTILIZATION:-0.85}
     - --allowed-local-media-path
-    - /root/files_to_parse
+    - /minio_data/${MINIO_OCR_BUCKET:-ocr-images}
     - --trust-remote-code
     deploy:
       resources:
@@ -1055,7 +1097,7 @@ services:
     volumes:
       - ${HOME}/.cache/huggingface:/root/.cache/huggingface
       - ${HOME}/.huggingface:/root/.huggingface
-      - ${FILES_TO_PARSE_HOST_PATH:-/home/ubuntu/Github/trustgraph/files_to_parse}:/root/files_to_parse
+      - /minio-data:/minio_data
   workbench-ui:
     deploy:
       resources:
@@ -1099,7 +1141,6 @@ volumes:
   bookie: {}
   cassandra: {}
   grafana-storage: {}
-  minio-data: {}
   prometheus-data: {}
   qdrant: {}
   zookeeper: {}

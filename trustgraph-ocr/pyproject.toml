@@ -14,6 +14,7 @@ dependencies = [
     "pulsar-client",
     "prometheus-client",
     "boto3",
+    "minio",
     "pdf2image",
     "pytesseract",
     "requests",
