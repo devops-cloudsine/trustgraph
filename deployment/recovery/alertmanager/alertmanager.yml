@@ -1,0 +1,100 @@
+# =============================================================================
+# TrustGraph AlertManager Configuration
+# =============================================================================
+# Configure your notification channels below.
+# Documentation: https://prometheus.io/docs/alerting/latest/configuration/
+# =============================================================================
+
+global:
+  # How long to wait before sending a notification again if it has already
+  # been sent successfully for an alert.
+  resolve_timeout: 5m
+
+# The root route - all alerts enter here
+route:
+  # Default receiver
+  receiver: 'default-receiver'
+  
+  # Group alerts by these labels
+  group_by: ['alertname', 'severity', 'service']
+  
+  # How long to wait before sending notifications for a group
+  group_wait: 30s
+  
+  # How long to wait before sending notifications about new alerts
+  # added to a group of alerts that have already been sent
+  group_interval: 5m
+  
+  # How long to wait before sending a notification again
+  repeat_interval: 4h
+  
+  # Child routes for different severities
+  routes:
+    # Critical alerts - notify immediately
+    - match:
+        severity: critical
+      receiver: 'critical-receiver'
+      group_wait: 10s
+      repeat_interval: 1h
+    
+    # Warning alerts
+    - match:
+        severity: warning
+      receiver: 'warning-receiver'
+      group_wait: 1m
+      repeat_interval: 4h
+
+# Receivers define notification channels
+receivers:
+  # Default receiver - logs only (always works)
+  - name: 'default-receiver'
+    # No external notifications - alerts visible in AlertManager UI
+
+  # Critical alerts receiver
+  - name: 'critical-receiver'
+    # Uncomment and configure ONE of these:
+    
+    # --- Slack ---
+    # slack_configs:
+    #   - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+    #     channel: '#alerts'
+    #     title: '🚨 TrustGraph CRITICAL Alert'
+    #     text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}{{ end }}'
+    #     send_resolved: true
+    
+    # --- Discord (use Slack-compatible webhook) ---
+    # slack_configs:
+    #   - api_url: 'https://discord.com/api/webhooks/YOUR/DISCORD/WEBHOOK/slack'
+    #     channel: '#alerts'
+    #     title: '🚨 TrustGraph CRITICAL Alert'
+    #     text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}{{ end }}'
+    
+    # --- Email ---
+    # email_configs:
+    #   - to: 'admin@example.com'
+    #     from: 'alertmanager@trustgraph.local'
+    #     smarthost: 'smtp.example.com:587'
+    #     auth_username: 'user'
+    #     auth_password: 'password'
+    #     require_tls: true
+    
+    # --- Webhook (generic HTTP POST) ---
+    # webhook_configs:
+    #   - url: 'http://your-webhook-endpoint/alerts'
+    #     send_resolved: true
+
+  # Warning alerts receiver
+  - name: 'warning-receiver'
+    # Configure similar to critical-receiver but with less urgency
+    # webhook_configs:
+    #   - url: 'http://your-webhook-endpoint/warnings'
+
+# Inhibition rules - prevent duplicate alerts
+inhibit_rules:
+  # If a critical alert fires, suppress warnings for the same service
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service']
+

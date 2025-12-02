@@ -1,0 +1,79 @@
+# =============================================================================
+# TrustGraph Prometheus Configuration
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'trustgraph'
+    environment: 'production'
+
+# Alerting configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - 'alertmanager:9093'
+
+# Load alerting rules
+rule_files:
+  - "alerts/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # TrustGraph Watchdog metrics
+  - job_name: 'trustgraph-watchdog'
+    static_configs:
+      - targets: ['host.docker.internal:9999']
+    relabel_configs:
+      - source_labels: [__address__]
+        regex: 'host.docker.internal:(.*)'
+        replacement: 'watchdog:${1}'
+        target_label: instance
+
+  # Docker containers via cAdvisor (if available)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    honor_labels: true
+
+  # TrustGraph API Gateway
+  - job_name: 'trustgraph-api'
+    metrics_path: /api/v1/metrics
+    static_configs:
+      - targets: ['api-gateway:8088']
+
+  # Pulsar metrics
+  - job_name: 'pulsar'
+    static_configs:
+      - targets: ['pulsar:8080']
+    metrics_path: /metrics
+
+  # Qdrant metrics
+  - job_name: 'qdrant'
+    static_configs:
+      - targets: ['qdrant:6333']
+    metrics_path: /metrics
+
+  # MinIO metrics
+  - job_name: 'minio'
+    static_configs:
+      - targets: ['minio:9000']
+    metrics_path: /minio/v2/metrics/cluster
+
+  # vLLM metrics (if exposed)
+  - job_name: 'vllm'
+    static_configs:
+      - targets: ['vllm:8000']
+    metrics_path: /metrics
+
+  # AlertManager metrics
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']

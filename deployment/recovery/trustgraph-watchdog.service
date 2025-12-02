@@ -1,0 +1,51 @@
+# =============================================================================
+# TrustGraph Watchdog Systemd Service
+# =============================================================================
+# Provides automatic recovery for TrustGraph services
+#
+# Installation:
+#   sudo cp trustgraph-watchdog.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable trustgraph-watchdog
+#   sudo systemctl start trustgraph-watchdog
+#
+# Management:
+#   sudo systemctl status trustgraph-watchdog  # Check status
+#   sudo journalctl -u trustgraph-watchdog -f  # View logs
+# =============================================================================
+
+[Unit]
+Description=TrustGraph Auto-Recovery Watchdog
+Documentation=https://github.com/trustgraph/trustgraph
+After=docker.service
+Requires=docker.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=ubuntu
+Group=docker
+WorkingDirectory=/home/ubuntu/Github/trustgraph/deployment/recovery
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/ubuntu/Github/trustgraph/deployment/recovery/trustgraph-recovery-daemon.sh
+Restart=always
+RestartSec=30
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/run/docker.sock /home/ubuntu/Github/trustgraph/deployment/recovery/logs /home/ubuntu/Github/trustgraph/deployment
+
+# Resource limits
+MemoryMax=256M
+CPUQuota=10%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=trustgraph-watchdog
+
+[Install]
+WantedBy=multi-user.target

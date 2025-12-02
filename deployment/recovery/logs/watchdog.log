@@ -1,0 +1,685 @@
+[2025-12-02 05:08:53] [INFO] ===========================================
+[2025-12-02 05:08:53] [INFO] TrustGraph Recovery Daemon Starting
+[2025-12-02 05:08:53] [INFO] ===========================================
+[2025-12-02 05:08:53] [INFO] Deployment Mode: swarm
+[2025-12-02 05:08:53] [INFO] Compose Dir: /home/ubuntu/Github/trustgraph/deployment
+[2025-12-02 05:08:53] [INFO] Check Interval: 30s
+[2025-12-02 05:08:53] [INFO] Max Restart Attempts: 5
+[2025-12-02 05:08:53] [INFO] Metrics Port: 9999
+[2025-12-02 05:08:53] [INFO] ===========================================
+[2025-12-02 05:08:53] [INFO] Validating TrustGraph installation...
+[2025-12-02 05:08:55] [INFO] Validation passed
+[2025-12-02 05:08:55] [INFO] Waiting 60s for initial startup...
+[2025-12-02 05:08:58] [INFO] Shutting down TrustGraph Recovery Daemon...
+[2025-12-02 05:08:58] [INFO] ===========================================
+[2025-12-02 05:08:58] [INFO] TrustGraph Recovery Daemon Starting
+[2025-12-02 05:08:58] [INFO] ===========================================
+[2025-12-02 05:08:59] [INFO] Deployment Mode: swarm
+[2025-12-02 05:08:59] [INFO] Compose Dir: /home/ubuntu/Github/trustgraph/deployment
+[2025-12-02 05:08:59] [INFO] Check Interval: 30s
+[2025-12-02 05:08:59] [INFO] Max Restart Attempts: 5
+[2025-12-02 05:08:59] [INFO] Metrics Port: 9999
+[2025-12-02 05:08:59] [INFO] ===========================================
+[2025-12-02 05:08:59] [INFO] Validating TrustGraph installation...
+[2025-12-02 05:09:00] [INFO] Validation passed
+[2025-12-02 05:09:00] [INFO] Waiting 60s for initial startup...
+[2025-12-02 05:10:00] [INFO] Starting recovery monitoring loop...
+[2025-12-02 05:10:07] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:10:08] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:10:08] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:10:08] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:10:46] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:10:46] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:10:46] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:10:46] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:11:25] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:11:25] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:11:25] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:11:25] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:12:05] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:12:05] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:12:05] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:12:06] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:12:47] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:12:47] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:12:47] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:12:47] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:12:55] [INFO] Shutting down TrustGraph Recovery Daemon...
+[2025-12-02 05:13:15] [INFO] ===========================================
+[2025-12-02 05:13:15] [INFO] TrustGraph Recovery Daemon Starting
+[2025-12-02 05:13:15] [INFO] ===========================================
+[2025-12-02 05:13:15] [INFO] Deployment Mode: swarm
+[2025-12-02 05:13:15] [INFO] Compose Dir: /home/ubuntu/Github/trustgraph/deployment
+[2025-12-02 05:13:15] [INFO] Check Interval: 30s
+[2025-12-02 05:13:16] [INFO] Max Restart Attempts: 5
+[2025-12-02 05:13:16] [INFO] Metrics Port: 9999
+[2025-12-02 05:13:16] [INFO] ===========================================
+[2025-12-02 05:13:16] [INFO] Validating TrustGraph installation...
+[2025-12-02 05:13:17] [INFO] Validation passed
+[2025-12-02 05:13:17] [INFO] Waiting 60s for initial startup...
+[2025-12-02 05:14:17] [INFO] Starting recovery monitoring loop...
+[2025-12-02 05:14:24] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:14:24] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:14:24] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:14:24] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:15:03] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:15:03] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:15:03] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:15:03] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:15:42] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:15:42] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:15:42] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:15:42] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:16:22] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:16:22] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:16:23] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:16:23] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:17:05] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:17:05] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:17:05] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:17:05] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:17:48] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:17:48] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:17:48] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:17:48] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:18:34] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:18:34] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:18:34] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:18:34] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:19:22] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:19:22] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:19:23] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:19:23] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:20:13] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:20:13] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:20:13] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:20:14] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:21:08] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:21:08] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:21:09] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:21:09] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:21:47] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:21:47] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:21:47] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:21:47] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:22:26] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:22:26] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:22:26] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:22:26] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:23:05] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:23:05] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:23:05] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:23:05] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:23:43] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:23:43] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:23:43] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:23:43] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:24:21] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init trustgraph_vllm
+[2025-12-02 05:24:21] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:24:21] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:24:21] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:24:59] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:24:59] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:24:59] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:25:37] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:25:37] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:25:37] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:26:15] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:26:15] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:26:15] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:26:53] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:26:53] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:26:53] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:27:31] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:27:31] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:27:31] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:28:08] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:28:08] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:28:08] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:28:46] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:28:46] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:28:46] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:29:24] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:29:24] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:29:24] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:30:01] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:30:01] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:30:02] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:30:39] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:30:39] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:30:39] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:31:17] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:31:17] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:31:17] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:38:55] [WARN] Unhealthy swarm services detected: trustgraph_api-gateway trustgraph_cassandra trustgraph_ddg-mcp-server trustgraph_docx-ocr trustgraph_embeddings trustgraph_grafana trustgraph_graph-rag trustgraph_kg-extract-agent trustgraph_kg-extract-objects trustgraph_kg-manager trustgraph_kg-store trustgraph_mcp-tool trustgraph_metering trustgraph_metering-rag trustgraph_minio trustgraph_pulsar trustgraph_pulsar-init trustgraph_query-doc-embeddings trustgraph_query-triples trustgraph_store-graph-embeddings trustgraph_store-triples trustgraph_vllm trustgraph_workbench-ui trustgraph_xlsx-ocr trustgraph_zookeeper
+[2025-12-02 05:38:55] [INFO] Force-updating swarm service: trustgraph_api-gateway
+[2025-12-02 05:38:55] [INFO] Force-updating swarm service: trustgraph_cassandra
+[2025-12-02 05:38:56] [INFO] Force-updating swarm service: trustgraph_ddg-mcp-server
+[2025-12-02 05:38:56] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 05:38:56] [INFO] Force-updating swarm service: trustgraph_embeddings
+[2025-12-02 05:38:57] [INFO] Force-updating swarm service: trustgraph_grafana
+[2025-12-02 05:38:57] [INFO] Force-updating swarm service: trustgraph_graph-rag
+[2025-12-02 05:38:58] [INFO] Force-updating swarm service: trustgraph_kg-extract-agent
+[2025-12-02 05:38:58] [INFO] Force-updating swarm service: trustgraph_kg-extract-objects
+[2025-12-02 05:38:59] [INFO] Force-updating swarm service: trustgraph_kg-manager
+[2025-12-02 05:39:00] [INFO] Force-updating swarm service: trustgraph_kg-store
+[2025-12-02 05:39:00] [INFO] Force-updating swarm service: trustgraph_mcp-tool
+[2025-12-02 05:39:01] [INFO] Force-updating swarm service: trustgraph_metering
+[2025-12-02 05:39:01] [INFO] Force-updating swarm service: trustgraph_metering-rag
+[2025-12-02 05:39:02] [INFO] Force-updating swarm service: trustgraph_minio
+[2025-12-02 05:39:03] [INFO] Force-updating swarm service: trustgraph_pulsar
+[2025-12-02 05:39:04] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:39:05] [INFO] Force-updating swarm service: trustgraph_query-doc-embeddings
+[2025-12-02 05:39:05] [INFO] Force-updating swarm service: trustgraph_query-triples
+[2025-12-02 05:39:07] [INFO] Force-updating swarm service: trustgraph_store-graph-embeddings
+[2025-12-02 05:39:08] [INFO] Force-updating swarm service: trustgraph_store-triples
+[2025-12-02 05:39:09] [INFO] Force-updating swarm service: trustgraph_vllm
+[2025-12-02 05:39:10] [INFO] Force-updating swarm service: trustgraph_workbench-ui
+[2025-12-02 05:39:11] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 05:39:12] [INFO] Force-updating swarm service: trustgraph_zookeeper
+[2025-12-02 05:39:51] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:39:51] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:39:51] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:40:29] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:40:29] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:40:29] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:41:07] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:41:07] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:41:07] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:41:45] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:41:45] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:41:45] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:42:23] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:42:23] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:42:23] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:43:01] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:43:01] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:43:01] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:43:39] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:43:39] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:43:39] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:44:17] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:44:17] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:44:17] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:44:55] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:44:55] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:44:55] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:45:32] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:45:33] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:45:33] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:46:10] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:46:10] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:46:10] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:46:48] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:46:48] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:46:48] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:47:26] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:47:26] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:47:27] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:48:04] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:48:04] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:48:05] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:48:42] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:48:42] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:48:42] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:49:20] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:49:20] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:49:20] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:52:31] [WARN] Unhealthy swarm services detected: trustgraph_agent-manager trustgraph_api-gateway trustgraph_bookie trustgraph_cassandra trustgraph_chunker trustgraph_config-svc trustgraph_ddg-mcp-server trustgraph_document-embeddings trustgraph_embeddings trustgraph_grafana trustgraph_graph-embeddings trustgraph_graph-rag trustgraph_graph-retrieval trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_kg-extract-definitions trustgraph_kg-extract-objects trustgraph_kg-store trustgraph_librarian trustgraph_mcp-server trustgraph_mcp-tool trustgraph_metering trustgraph_nlp-query trustgraph_pdf-ocr trustgraph_prompt-rag trustgraph_pulsar-init trustgraph_qdrant trustgraph_query-doc-embeddings trustgraph_query-objects trustgraph_store-doc-embeddings trustgraph_store-graph-embeddings trustgraph_structured-diag trustgraph_text-completion trustgraph_vllm
+[2025-12-02 05:52:31] [INFO] Force-updating swarm service: trustgraph_agent-manager
+[2025-12-02 05:52:31] [INFO] Force-updating swarm service: trustgraph_api-gateway
+[2025-12-02 05:52:31] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 05:52:32] [INFO] Force-updating swarm service: trustgraph_cassandra
+[2025-12-02 05:52:32] [INFO] Force-updating swarm service: trustgraph_chunker
+[2025-12-02 05:52:33] [INFO] Force-updating swarm service: trustgraph_config-svc
+[2025-12-02 05:52:33] [INFO] Force-updating swarm service: trustgraph_ddg-mcp-server
+[2025-12-02 05:52:33] [INFO] Force-updating swarm service: trustgraph_document-embeddings
+[2025-12-02 05:52:34] [INFO] Force-updating swarm service: trustgraph_embeddings
+[2025-12-02 05:52:34] [INFO] Force-updating swarm service: trustgraph_grafana
+[2025-12-02 05:52:35] [INFO] Force-updating swarm service: trustgraph_graph-embeddings
+[2025-12-02 05:52:36] [INFO] Force-updating swarm service: trustgraph_graph-rag
+[2025-12-02 05:52:37] [INFO] Force-updating swarm service: trustgraph_graph-retrieval
+[2025-12-02 05:52:37] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 05:52:38] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:52:38] [INFO] Force-updating swarm service: trustgraph_kg-extract-definitions
+[2025-12-02 05:52:39] [INFO] Force-updating swarm service: trustgraph_kg-extract-objects
+[2025-12-02 05:52:40] [INFO] Force-updating swarm service: trustgraph_kg-store
+[2025-12-02 05:52:42] [INFO] Force-updating swarm service: trustgraph_librarian
+[2025-12-02 05:52:42] [INFO] Force-updating swarm service: trustgraph_mcp-server
+[2025-12-02 05:52:43] [INFO] Force-updating swarm service: trustgraph_mcp-tool
+[2025-12-02 05:52:44] [INFO] Force-updating swarm service: trustgraph_metering
+[2025-12-02 05:52:44] [INFO] Force-updating swarm service: trustgraph_nlp-query
+[2025-12-02 05:52:47] [INFO] Force-updating swarm service: trustgraph_pdf-ocr
+[2025-12-02 05:52:47] [INFO] Force-updating swarm service: trustgraph_prompt-rag
+[2025-12-02 05:52:47] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:52:48] [INFO] Force-updating swarm service: trustgraph_qdrant
+[2025-12-02 05:52:50] [INFO] Force-updating swarm service: trustgraph_query-doc-embeddings
+[2025-12-02 05:52:53] [INFO] Shutting down TrustGraph Recovery Daemon...
+[2025-12-02 05:53:24] [INFO] ===========================================
+[2025-12-02 05:53:24] [INFO] TrustGraph Recovery Daemon Starting
+[2025-12-02 05:53:24] [INFO] ===========================================
+[2025-12-02 05:53:24] [INFO] Deployment Mode: swarm
+[2025-12-02 05:53:24] [INFO] Compose Dir: /home/ubuntu/Github/trustgraph/deployment
+[2025-12-02 05:53:24] [INFO] Check Interval: 30s
+[2025-12-02 05:53:25] [INFO] Max Restart Attempts: 5
+[2025-12-02 05:53:25] [INFO] Metrics Port: 9999
+[2025-12-02 05:53:25] [INFO] ===========================================
+[2025-12-02 05:53:25] [INFO] Validating TrustGraph installation...
+[2025-12-02 05:53:26] [INFO] Validation passed
+[2025-12-02 05:53:26] [INFO] Waiting 60s for initial startup...
+[2025-12-02 05:54:26] [INFO] Starting recovery monitoring loop...
+[2025-12-02 05:54:33] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:54:33] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:54:33] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:55:11] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:55:11] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:55:11] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:55:49] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:55:49] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:55:49] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:56:27] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:56:27] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:56:27] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:57:05] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:57:05] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:57:05] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:57:42] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:57:42] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:57:43] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:58:20] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:58:20] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:58:20] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:58:58] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:58:58] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:58:58] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 05:59:35] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 05:59:36] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 05:59:36] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:00:13] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:00:13] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:00:13] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:00:51] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:00:51] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:00:51] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:01:28] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:01:29] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:01:29] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:02:06] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:02:06] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:02:06] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:02:44] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:02:44] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:02:44] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:03:22] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:03:22] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:03:22] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:04:00] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:04:00] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:04:00] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:04:37] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:04:37] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:04:37] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:05:15] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:05:15] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:05:15] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:05:53] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:05:53] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:05:53] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:06:31] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:06:31] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:06:31] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:07:09] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:07:09] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:07:09] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:07:47] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:07:47] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:07:47] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:09:56] [WARN] Unhealthy swarm services detected: trustgraph_bookie
+[2025-12-02 06:09:56] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:10:33] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:10:33] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:10:33] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:11:11] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:11:11] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:11:11] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:11:49] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:11:49] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:11:49] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:12:27] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:12:27] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:12:27] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:13:05] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:13:05] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:13:05] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:13:43] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:13:43] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:13:43] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:14:20] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:14:21] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:14:21] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:14:58] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:14:58] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:14:59] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:15:36] [WARN] Unhealthy swarm services detected: trustgraph_bookie
+[2025-12-02 06:15:36] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:16:14] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:16:14] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:16:14] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:16:52] [WARN] Unhealthy swarm services detected: trustgraph_bookie
+[2025-12-02 06:16:52] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:17:30] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:17:30] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:17:30] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:18:08] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:18:08] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:18:08] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:18:46] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:18:46] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:18:46] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:19:24] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:19:24] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:19:24] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:20:02] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:20:02] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:20:03] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:20:41] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_pulsar-init
+[2025-12-02 06:20:41] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:20:41] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:23:20] [WARN] Unhealthy swarm services detected: trustgraph_bookie
+[2025-12-02 06:23:20] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:23:57] [WARN] Unhealthy swarm services detected: trustgraph_pulsar-init
+[2025-12-02 06:23:58] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:24:35] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:24:35] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:24:35] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:25:13] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:25:13] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:25:13] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:25:51] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:25:51] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:25:51] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:26:29] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:26:29] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:26:29] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:27:07] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:27:07] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:27:07] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:27:45] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:27:45] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:27:45] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:28:23] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:28:23] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:28:23] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:29:01] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:29:01] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:29:01] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:29:39] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:29:39] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:29:39] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:30:17] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:30:17] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:30:17] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:30:55] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:30:55] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:30:55] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:31:33] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:31:33] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:31:33] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:32:11] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:32:11] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:32:11] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:32:49] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:32:49] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:32:49] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:33:27] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:33:27] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:33:27] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:34:05] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:34:05] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:34:05] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:34:43] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:34:43] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:34:43] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:35:21] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:35:21] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:35:21] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:35:59] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:35:59] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:35:59] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:36:37] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:36:37] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:36:37] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:37:14] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:37:14] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:37:15] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:37:52] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:37:52] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:37:52] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:38:30] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:38:30] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:38:30] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:39:08] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:39:08] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:39:08] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:39:46] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:39:46] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:39:46] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:40:24] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:40:24] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:40:24] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:41:02] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:41:02] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:41:02] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:41:02] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:41:03] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:41:03] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:41:04] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:41:42] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:41:42] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:41:42] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:41:42] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:41:42] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:41:43] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:41:43] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:42:21] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:42:21] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:42:21] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:42:22] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:42:22] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:42:22] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:42:22] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:43:01] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:43:01] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:43:01] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:43:01] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:43:01] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:43:01] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:43:02] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:43:40] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:43:40] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:43:40] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:43:40] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:43:41] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:43:41] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:43:41] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:46:51] [WARN] Unhealthy swarm services detected: trustgraph_bookie trustgraph_docx-ocr trustgraph_image-ocr trustgraph_pptx-ocr trustgraph_xlsx-ocr
+[2025-12-02 06:46:51] [INFO] Force-updating swarm service: trustgraph_bookie
+[2025-12-02 06:46:51] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:46:51] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:46:52] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:46:52] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:47:31] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:47:31] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:47:31] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:47:31] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:47:32] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:47:32] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:48:10] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:48:11] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:48:11] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:48:11] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:48:11] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:48:11] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:48:11] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:48:50] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:48:50] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:48:50] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:48:51] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:48:51] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:48:51] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:48:52] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:49:30] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:49:30] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:49:30] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:49:30] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:49:30] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:49:31] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:49:31] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:50:10] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:50:10] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:50:10] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:50:10] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:50:10] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:50:10] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:50:11] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:50:49] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:50:49] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:50:49] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:50:50] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:50:50] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:50:51] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:50:51] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:51:29] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:51:29] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:51:29] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:51:30] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:51:30] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:51:30] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:51:31] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:52:09] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:52:09] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:52:09] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:52:09] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:52:09] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:52:10] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:52:10] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:52:49] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:52:49] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:52:49] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:52:49] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:52:49] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:52:50] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:52:50] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:53:29] [WARN] Unhealthy swarm services detected: trustgraph_docx-ocr trustgraph_image-ocr trustgraph_init-trustgraph trustgraph_pptx-ocr trustgraph_pulsar-init trustgraph_xlsx-ocr
+[2025-12-02 06:53:29] [INFO] Force-updating swarm service: trustgraph_docx-ocr
+[2025-12-02 06:53:29] [INFO] Force-updating swarm service: trustgraph_image-ocr
+[2025-12-02 06:53:29] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:53:29] [INFO] Force-updating swarm service: trustgraph_pptx-ocr
+[2025-12-02 06:53:30] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:53:31] [INFO] Force-updating swarm service: trustgraph_xlsx-ocr
+[2025-12-02 06:54:09] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:54:09] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:54:09] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:54:48] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:54:48] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:54:48] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:55:27] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:55:27] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:55:27] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:56:05] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:56:05] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:56:05] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:56:44] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 06:56:44] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 06:56:44] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 06:59:53] [WARN] Unhealthy swarm services detected: trustgraph_zookeeper
+[2025-12-02 06:59:53] [INFO] Force-updating swarm service: trustgraph_zookeeper
+[2025-12-02 07:00:31] [WARN] Unhealthy swarm services detected: trustgraph_pulsar-init
+[2025-12-02 07:00:31] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:01:09] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:01:09] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:01:09] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:01:48] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:01:48] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:01:48] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:02:26] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:02:26] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:02:26] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:03:05] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:03:05] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:03:05] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:03:43] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:03:43] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:03:43] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:04:22] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:04:22] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:04:22] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:05:00] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:05:00] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:05:00] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:05:39] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:05:39] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:05:39] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:06:17] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:06:17] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:06:17] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:06:56] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:06:56] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:06:56] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:07:34] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:07:34] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:07:34] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:08:12] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:08:12] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:08:12] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:08:50] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:08:50] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:08:50] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:09:29] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:09:29] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:09:29] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:10:07] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:10:07] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:10:07] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:10:45] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:10:45] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:10:45] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:11:24] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:11:24] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:11:24] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:12:02] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:12:02] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:12:02] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:12:40] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:12:40] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:12:40] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:13:19] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:13:19] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:13:19] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:13:57] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:13:57] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:13:57] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:14:35] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:14:35] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:14:35] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:15:13] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:15:13] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:15:13] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:15:52] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:15:52] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:15:52] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:16:30] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:16:30] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:16:30] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:17:09] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:17:09] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:17:09] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:17:47] [WARN] Unhealthy swarm services detected: trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:17:47] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:17:47] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:18:25] [WARN] Unhealthy swarm services detected: trustgraph_chunker trustgraph_init-trustgraph trustgraph_pulsar-init
+[2025-12-02 07:18:26] [INFO] Force-updating swarm service: trustgraph_chunker
+[2025-12-02 07:18:26] [INFO] Force-updating swarm service: trustgraph_init-trustgraph
+[2025-12-02 07:18:26] [INFO] Force-updating swarm service: trustgraph_pulsar-init
+[2025-12-02 07:19:04] [WARN] Unhealthy swarm services detected: trustgraph_pulsar-init
+[2025-12-02 07:19:04] [INFO] Force-updating swarm service: trustgraph_pulsar-init

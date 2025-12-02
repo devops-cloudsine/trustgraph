@@ -1,0 +1,163 @@
+# =============================================================================
+# TrustGraph Alerting Rules
+# =============================================================================
+
+groups:
+  # ---------------------------------------------------------------------------
+  # Infrastructure Alerts
+  # ---------------------------------------------------------------------------
+  - name: trustgraph_infrastructure
+    rules:
+      # Critical: Pulsar is down
+      - alert: PulsarDown
+        expr: up{job="pulsar"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: pulsar
+        annotations:
+          summary: "Apache Pulsar is down"
+          description: "Pulsar message broker has been unreachable for more than 2 minutes. All message processing is affected."
+          runbook: "Check: docker compose logs pulsar"
+
+      # Critical: Cassandra is down
+      - alert: CassandraDown
+        expr: up{job="cassandra"} == 0 or absent(up{job="cassandra"})
+        for: 2m
+        labels:
+          severity: critical
+          service: cassandra
+        annotations:
+          summary: "Cassandra is down"
+          description: "Cassandra database has been unreachable for more than 2 minutes. Knowledge graph storage is affected."
+
+      # Critical: Qdrant is down
+      - alert: QdrantDown
+        expr: up{job="qdrant"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: qdrant
+        annotations:
+          summary: "Qdrant vector database is down"
+          description: "Qdrant has been unreachable for more than 2 minutes. Embeddings search is affected."
+
+      # Warning: vLLM is down
+      - alert: VllmDown
+        expr: up{job="vllm"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: vllm
+        annotations:
+          summary: "vLLM inference server is down"
+          description: "vLLM has been unreachable for more than 5 minutes. LLM inference is affected."
+
+      # Warning: MinIO is down
+      - alert: MinioDown
+        expr: up{job="minio"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: minio
+        annotations:
+          summary: "MinIO object storage is down"
+          description: "MinIO has been unreachable for more than 2 minutes. Document storage may be affected."
+
+  # ---------------------------------------------------------------------------
+  # TrustGraph Service Alerts
+  # ---------------------------------------------------------------------------
+  - name: trustgraph_services
+    rules:
+      # Critical: API Gateway is down
+      - alert: ApiGatewayDown
+        expr: up{job="trustgraph-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: api-gateway
+        annotations:
+          summary: "TrustGraph API Gateway is down"
+          description: "The API Gateway has been unreachable for more than 2 minutes. All external API access is blocked."
+
+      # Warning: High restart count
+      - alert: HighRestartCount
+        expr: increase(trustgraph_watchdog_total_restarts[1h]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High service restart count"
+          description: "More than 10 service restarts in the last hour. Check for systemic issues."
+
+      # Warning: Watchdog unhealthy services
+      - alert: UnhealthyServices
+        expr: trustgraph_watchdog_unhealthy_services > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Unhealthy services detected"
+          description: "{{ $value }} services are currently unhealthy and being recovered."
+
+      # Critical: Watchdog failing to recover
+      - alert: RecoveryFailing
+        expr: increase(trustgraph_watchdog_failed_restarts[30m]) > 5 and trustgraph_watchdog_unhealthy_services > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service recovery failing"
+          description: "Multiple restart attempts have failed. Manual intervention may be required."
+
+  # ---------------------------------------------------------------------------
+  # Resource Alerts
+  # ---------------------------------------------------------------------------
+  - name: trustgraph_resources
+    rules:
+      # Warning: High memory usage (if cAdvisor is enabled)
+      - alert: ContainerHighMemory
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} high memory usage"
+          description: "Container {{ $labels.name }} is using {{ $value | humanizePercentage }} of its memory limit."
+
+      # Warning: Container restarting frequently
+      - alert: ContainerRestarting
+        expr: rate(container_restart_count[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} restarting"
+          description: "Container {{ $labels.name }} has been restarting frequently."
+
+  # ---------------------------------------------------------------------------
+  # Message Queue Alerts (Pulsar)
+  # ---------------------------------------------------------------------------
+  - name: trustgraph_messaging
+    rules:
+      # Warning: High message backlog
+      - alert: PulsarHighBacklog
+        expr: pulsar_subscription_msg_backlog > 10000
+        for: 10m
+        labels:
+          severity: warning
+          service: pulsar
+        annotations:
+          summary: "High message backlog in Pulsar"
+          description: "Subscription {{ $labels.subscription }} has {{ $value }} messages in backlog."
+
+      # Critical: Very high message backlog
+      - alert: PulsarCriticalBacklog
+        expr: pulsar_subscription_msg_backlog > 100000
+        for: 5m
+        labels:
+          severity: critical
+          service: pulsar
+        annotations:
+          summary: "Critical message backlog in Pulsar"
+          description: "Subscription {{ $labels.subscription }} has {{ $value }} messages in backlog. Processing may be stalled."

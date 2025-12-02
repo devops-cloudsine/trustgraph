@@ -1,0 +1,1887 @@
+# =============================================================================
+# TrustGraph Docker Swarm Production Stack
+# =============================================================================
+# Deploy with: docker stack deploy -c docker-stack.yaml trustgraph
+#
+# Prerequisites:
+#   1. Initialize swarm: docker swarm init
+#   2. Create secrets (see deploy-swarm.sh)
+#   3. Create overlay networks (handled by stack deploy)
+#
+# This configuration matches docker-compose.yaml for compatibility.
+# No node labels required - all services will run on any available node.
+#
+# Development Mode:
+#   Set TRUSTGRAPH_DEV=true to use dev images and mount local code.
+#   Example: TRUSTGRAPH_DEV=true docker stack deploy -c docker-stack.yaml trustgraph
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Extension Fields (for development mode)
+# -----------------------------------------------------------------------------
+# Development image - uses editable pip installs so mounted code is used
+x-trustgraph-flow-dev-image: &trustgraph_flow_dev_image
+  docker.io/trustgraph/trustgraph-flow:${TRUSTGRAPH_FLOW_TAG:-dev}
+
+x-trustgraph-ocr-dev-image: &trustgraph_ocr_dev_image
+  ${TRUSTGRAPH_OCR_IMAGE:-trustgraph-ocr-dev:latest}
+
+x-trustgraph-dev-volumes: &trustgraph_dev_volumes
+  - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-base:/src/trustgraph-base:ro
+  - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-flow:/src/trustgraph-flow:ro
+
+x-trustgraph-ocr-dev-volumes: &trustgraph_ocr_dev_volumes
+  - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-base:/src/trustgraph-base:ro
+  - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-ocr:/src/trustgraph-ocr:ro
+
+# -----------------------------------------------------------------------------
+# Overlay Networks
+# -----------------------------------------------------------------------------
+networks:
+  # Internal backend network for all services
+  trustgraph-internal:
+    driver: overlay
+    attachable: true
+    driver_opts:
+      encrypted: "true"
+  
+  # Public-facing network for exposed services
+  trustgraph-public:
+    driver: overlay
+    attachable: true
+
+# -----------------------------------------------------------------------------
+# Docker Secrets (create before deploying)
+# -----------------------------------------------------------------------------
+secrets:
+  gateway_secret:
+    external: true
+  openai_token:
+    external: true
+  mcp_server_secret:
+    external: true
+  huggingface_token:
+    external: true
+  minio_root_user:
+    external: true
+  minio_root_password:
+    external: true
+  grafana_admin_password:
+    external: true
+
+# -----------------------------------------------------------------------------
+# Named Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  bookie:
+    driver: local
+  cassandra:
+    driver: local
+  grafana-storage:
+    driver: local
+  prometheus-data:
+    driver: local
+  qdrant:
+    driver: local
+  zookeeper:
+    driver: local
+  minio-data:
+    driver: local
+
+# -----------------------------------------------------------------------------
+# Services
+# -----------------------------------------------------------------------------
+services:
+  # ===========================================================================
+  # CORE INFRASTRUCTURE - Stateful Services
+  # ===========================================================================
+  
+  zookeeper:
+    image: docker.io/apachepulsar/pulsar:4.1.0
+    user: "0:1000"
+    command:
+      - bash
+      - -c
+      - bin/apply-config-from-env.py conf/zookeeper.conf && bin/generate-zookeeper-config.sh conf/zookeeper.conf && exec bin/pulsar zookeeper
+    environment:
+      PULSAR_MEM: -Xms256m -Xmx256m -XX:MaxDirectMemorySize=256m
+      metadataStoreUrl: zk:zookeeper:2181
+    networks:
+      - trustgraph-internal
+    ports:
+      - target: 2181
+        published: 2181
+        mode: host
+      - target: 2888
+        published: 2888
+        mode: host
+      - target: 3888
+        published: 3888
+        mode: host
+    volumes:
+      - zookeeper:/pulsar/data/zookeeper
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '1'
+          memory: 400M
+        reservations:
+          cpus: '0.05'
+          memory: 400M
+
+  bookie:
+    image: docker.io/apachepulsar/pulsar:4.1.0
+    user: "0:1000"
+    command:
+      - bash
+      - -c
+      - bin/apply-config-from-env.py conf/bookkeeper.conf && exec bin/pulsar bookie
+    environment:
+      BOOKIE_MEM: -Xms512m -Xmx512m -XX:MaxDirectMemorySize=256m
+      advertisedAddress: bookie
+      bookieId: bookie
+      clusterName: cluster-a
+      metadataStoreUri: metadata-store:zk:zookeeper:2181
+      zkServers: zookeeper:2181
+    networks:
+      - trustgraph-internal
+    ports:
+      - target: 3181
+        published: 3181
+        mode: host
+    volumes:
+      - bookie:/pulsar/data/bookkeeper
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1024M
+        reservations:
+          cpus: '0.1'
+          memory: 1024M
+
+  pulsar:
+    image: docker.io/apachepulsar/pulsar:4.1.0
+    command:
+      - bash
+      - -c
+      - bin/apply-config-from-env.py conf/broker.conf && exec bin/pulsar broker
+    environment:
+      PULSAR_MEM: -Xms512m -Xmx512m -XX:MaxDirectMemorySize=256m
+      advertisedAddress: pulsar
+      advertisedListeners: external:pulsar://pulsar:6650,localhost:pulsar://localhost:6650
+      clusterName: cluster-a
+      managedLedgerDefaultAckQuorum: '1'
+      managedLedgerDefaultEnsembleSize: '1'
+      managedLedgerDefaultWriteQuorum: '1'
+      metadataStoreUrl: zk:zookeeper:2181
+      zookeeperServers: zookeeper:2181
+    networks:
+      - trustgraph-internal
+      - trustgraph-public
+    ports:
+      - target: 6650
+        published: 6650
+        mode: host
+      - target: 8080
+        published: 8080
+        mode: host
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 15s
+        max_attempts: 100
+        window: 180s
+      resources:
+        limits:
+          cpus: '1'
+          memory: 800M
+        reservations:
+          cpus: '0.1'
+          memory: 800M
+
+  pulsar-init:
+    image: docker.io/apachepulsar/pulsar:4.1.0
+    command:
+      - bash
+      - -c
+      - sleep 10 && bin/pulsar initialize-cluster-metadata --cluster cluster-a --zookeeper zookeeper:2181 --configuration-store zookeeper:2181 --web-service-url http://pulsar:8080 --broker-service-url pulsar://pulsar:6650
+    environment:
+      PULSAR_MEM: -Xms256m -Xmx256m -XX:MaxDirectMemorySize=256m
+    networks:
+      - trustgraph-internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 30s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.05'
+          memory: 512M
+
+  cassandra:
+    image: docker.io/cassandra:4.1.10
+    environment:
+      JVM_OPTS: -Xms300M -Xmx300M -Dcassandra.skip_wait_for_gossip_to_settle=0
+    networks:
+      - trustgraph-internal
+    ports:
+      - target: 9042
+        published: 9042
+        mode: host
+    volumes:
+      - cassandra:/var/lib/cassandra
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 15s
+        max_attempts: 100
+        window: 180s
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1000M
+        reservations:
+          cpus: '0.5'
+          memory: 1000M
+
+  qdrant:
+    image: docker.io/qdrant/qdrant:v1.15.4
+    networks:
+      - trustgraph-internal
+    ports:
+      - target: 6333
+        published: 6333
+        mode: host
+      - target: 6334
+        published: 6334
+        mode: host
+    volumes:
+      - qdrant:/qdrant/storage
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.5'
+          memory: 1024M
+
+  minio:
+    image: docker.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command:
+      - minio
+      - server
+      - /minio_data
+      - --console-address
+      - :9001
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    networks:
+      - trustgraph-internal
+      - trustgraph-public
+    ports:
+      - target: 9000
+        published: 9000
+        mode: host
+      - target: 9001
+        published: 9001
+        mode: host
+    volumes:
+      - minio-data:/minio_data
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # ===========================================================================
+  # MONITORING STACK
+  # ===========================================================================
+
+  grafana:
+    image: docker.io/grafana/grafana:12.1.1
+    environment:
+      GF_ORG_NAME: trustgraph.ai
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana_admin_password
+    secrets:
+      - grafana_admin_password
+    networks:
+      - trustgraph-internal
+      - trustgraph-public
+    ports:
+      - target: 3000
+        published: 3000
+        mode: ingress
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 60s
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 256M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  prometheus:
+    image: docker.io/prom/prometheus:v3.5.0
+    networks:
+      - trustgraph-internal
+      - trustgraph-public
+    ports:
+      - target: 9090
+        published: 9090
+        mode: ingress
+    volumes:
+      - prometheus-data:/prometheus
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 60s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # ===========================================================================
+  # API & UI SERVICES
+  # ===========================================================================
+
+  api-gateway:
+    image: *trustgraph_flow_dev_image
+    command:
+      - api-gateway
+      - -p
+      - pulsar://pulsar:6650
+      - --timeout
+      - '600'
+      - --port
+      - '8088'
+      - --log-level
+      - DEBUG
+    environment:
+      GATEWAY_SECRET_FILE: /run/secrets/gateway_secret
+    secrets:
+      - gateway_secret
+    networks:
+      - trustgraph-internal
+      - trustgraph-public
+    ports:
+      - target: 8088
+        published: 8088
+        mode: ingress
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+
+  workbench-ui:
+    image: docker.io/trustgraph/workbench-ui:1.2.6
+    networks:
+      - trustgraph-public
+    ports:
+      - target: 8888
+        published: 8888
+        mode: ingress
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 60s
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+
+  mcp-server:
+    image: docker.io/trustgraph/trustgraph-mcp:${TRUSTGRAPH_VERSION:-1.4.23}
+    command:
+      - mcp-server
+      - --port
+      - '8000'
+    environment:
+      MCP_SERVER_SECRET_FILE: /run/secrets/mcp_server_secret
+    secrets:
+      - mcp_server_secret
+    networks:
+      - trustgraph-internal
+      - trustgraph-public
+    ports:
+      - target: 8000
+        published: 8000
+        mode: ingress
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 60s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+
+  ddg-mcp-server:
+    image: docker.io/trustgraph/ddg-mcp-server:0.1.0
+    networks:
+      - trustgraph-internal
+      - trustgraph-public
+    ports:
+      - target: 9870
+        published: 9870
+        mode: ingress
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 60s
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+
+  # ===========================================================================
+  # TRUSTGRAPH FLOW SERVICES (Stateless workers)
+  # ===========================================================================
+
+  init-trustgraph:
+    image: *trustgraph_flow_dev_image
+    command:
+      - tg-init-trustgraph
+      - -p
+      - http://pulsar:8080
+      - --config-file
+      - /trustgraph/config.json
+    networks:
+      - trustgraph-internal
+    volumes:
+      - ./trustgraph:/trustgraph/
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-base:/src/trustgraph-base:ro
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-flow:/src/trustgraph-flow:ro
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 30s
+        max_attempts: 100
+        window: 120s
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  agent-manager:
+    image: *trustgraph_flow_dev_image
+    command:
+      - agent-manager-react
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  chunker:
+    image: *trustgraph_flow_dev_image
+    command:
+      - chunker-token
+      - -p
+      - pulsar://pulsar:6650
+      - --chunk-size
+      - '250'
+      - --chunk-overlap
+      - '15'
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  config-svc:
+    image: *trustgraph_flow_dev_image
+    command:
+      - config-svc
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  document-embeddings:
+    image: *trustgraph_flow_dev_image
+    command:
+      - document-embeddings
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  pdf-decoder:
+    image: *trustgraph_flow_dev_image
+    command:
+      - pdf-decoder
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_root_user
+      MINIO_SECRET_KEY_FILE: /run/secrets/minio_root_password
+      MINIO_BUCKET: ${MINIO_OCR_BUCKET:-ocr-images}
+      MINIO_SECURE: "false"
+      MINIO_LOCAL_MOUNT_PATH: /minio_data
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    networks:
+      - trustgraph-internal
+    volumes:
+      - /minio-data:/minio_data
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-base:/src/trustgraph-base:ro
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-flow:/src/trustgraph-flow:ro
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+
+  document-rag:
+    image: *trustgraph_flow_dev_image
+    command:
+      - document-rag
+      - -p
+      - pulsar://pulsar:6650
+      - --doc-limit
+      - '5'
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  document-retrieval:
+    image: *trustgraph_flow_dev_image
+    command:
+      - document-retrieval
+      - -p
+      - pulsar://pulsar:6650
+      - --doc-limit
+      - '20'
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  embeddings:
+    image: docker.io/trustgraph/trustgraph-hf:${TRUSTGRAPH_VERSION:-1.4.23}
+    command:
+      - embeddings-hf
+      - -p
+      - pulsar://pulsar:6650
+      - --concurrency
+      - '1'
+      - -m
+      - all-MiniLM-L6-v2
+    networks:
+      - trustgraph-internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        reservations:
+          cpus: '0.5'
+          memory: 400M
+
+  graph-embeddings:
+    image: *trustgraph_flow_dev_image
+    command:
+      - graph-embeddings
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  graph-rag:
+    image: *trustgraph_flow_dev_image
+    command:
+      - graph-rag
+      - -p
+      - pulsar://pulsar:6650
+      - --entity-limit
+      - '10'
+      - --triple-limit
+      - '15'
+      - --max-subgraph-size
+      - '100'
+      - --max-path-length
+      - '2'
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  graph-retrieval:
+    image: *trustgraph_flow_dev_image
+    command:
+      - graph-retrieval
+      - -p
+      - pulsar://pulsar:6650
+      - --entity-limit
+      - '50'
+      - --triple-limit
+      - '30'
+      - --max-subgraph-size
+      - '1000'
+      - --max-path-length
+      - '2'
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # ===========================================================================
+  # KNOWLEDGE GRAPH EXTRACTION SERVICES
+  # ===========================================================================
+
+  kg-extract-agent:
+    image: *trustgraph_flow_dev_image
+    command:
+      - kg-extract-agent
+      - -p
+      - pulsar://pulsar:6650
+      - --concurrency
+      - '1'
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  kg-extract-definitions:
+    image: *trustgraph_flow_dev_image
+    command:
+      - kg-extract-definitions
+      - -p
+      - pulsar://pulsar:6650
+      - --concurrency
+      - '1'
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  kg-extract-objects:
+    image: *trustgraph_flow_dev_image
+    command:
+      - kg-extract-objects
+      - -p
+      - pulsar://pulsar:6650
+      - --concurrency
+      - '1'
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  kg-extract-relationships:
+    image: *trustgraph_flow_dev_image
+    command:
+      - kg-extract-relationships
+      - -p
+      - pulsar://pulsar:6650
+      - --concurrency
+      - '1'
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  kg-manager:
+    image: *trustgraph_flow_dev_image
+    command:
+      - kg-manager
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  kg-store:
+    image: *trustgraph_flow_dev_image
+    command:
+      - kg-store
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  librarian:
+    image: *trustgraph_flow_dev_image
+    command:
+      - librarian
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+
+  mcp-tool:
+    image: *trustgraph_flow_dev_image
+    command:
+      - mcp-tool
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  metering:
+    image: *trustgraph_flow_dev_image
+    command:
+      - metering
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  metering-rag:
+    image: *trustgraph_flow_dev_image
+    command:
+      - metering
+      - -p
+      - pulsar://pulsar:6650
+      - --id
+      - metering-rag
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  nlp-query:
+    image: *trustgraph_flow_dev_image
+    command:
+      - nlp-query
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # ===========================================================================
+  # OCR SERVICES
+  # ===========================================================================
+
+  pdf-ocr:
+    image: *trustgraph_ocr_dev_image
+    command:
+      - pdf-ocr
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_root_user
+      MINIO_SECRET_KEY_FILE: /run/secrets/minio_root_password
+      MINIO_BUCKET: ${MINIO_OCR_BUCKET:-ocr-images}
+      MINIO_SECURE: "false"
+      MINIO_LOCAL_MOUNT_PATH: /minio_data
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    networks:
+      - trustgraph-internal
+    volumes:
+      - /minio-data:/minio_data
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-base:/src/trustgraph-base:ro
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-ocr:/src/trustgraph-ocr:ro
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 512M
+
+  docx-ocr:
+    image: *trustgraph_ocr_dev_image
+    command:
+      - docx-ocr
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_root_user
+      MINIO_SECRET_KEY_FILE: /run/secrets/minio_root_password
+      MINIO_BUCKET: ${MINIO_OCR_BUCKET:-ocr-images}
+      MINIO_SECURE: "false"
+      MINIO_LOCAL_MOUNT_PATH: /minio_data
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    networks:
+      - trustgraph-internal
+    volumes:
+      - /minio-data:/minio_data
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-base:/src/trustgraph-base:ro
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-ocr:/src/trustgraph-ocr:ro
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.1'
+          memory: 1024M
+
+  pptx-ocr:
+    image: *trustgraph_ocr_dev_image
+    command:
+      - pptx-ocr
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_root_user
+      MINIO_SECRET_KEY_FILE: /run/secrets/minio_root_password
+      MINIO_BUCKET: ${MINIO_OCR_BUCKET:-ocr-images}
+      MINIO_SECURE: "false"
+      MINIO_LOCAL_MOUNT_PATH: /minio_data
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    networks:
+      - trustgraph-internal
+    volumes:
+      - /minio-data:/minio_data
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-base:/src/trustgraph-base:ro
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-ocr:/src/trustgraph-ocr:ro
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
+        reservations:
+          cpus: '0.1'
+          memory: 1024M
+
+  image-ocr:
+    image: *trustgraph_ocr_dev_image
+    command:
+      - image-ocr
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_root_user
+      MINIO_SECRET_KEY_FILE: /run/secrets/minio_root_password
+      MINIO_BUCKET: ${MINIO_OCR_BUCKET:-ocr-images}
+      MINIO_SECURE: "false"
+      MINIO_LOCAL_MOUNT_PATH: /minio_data
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    networks:
+      - trustgraph-internal
+    volumes:
+      - /minio-data:/minio_data
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-base:/src/trustgraph-base:ro
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-ocr:/src/trustgraph-ocr:ro
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 512M
+
+  xlsx-ocr:
+    image: *trustgraph_ocr_dev_image
+    command:
+      - xlsx-ocr
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY_FILE: /run/secrets/minio_root_user
+      MINIO_SECRET_KEY_FILE: /run/secrets/minio_root_password
+      MINIO_BUCKET: ${MINIO_OCR_BUCKET:-ocr-images}
+      MINIO_SECURE: "false"
+      MINIO_LOCAL_MOUNT_PATH: /minio_data
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    networks:
+      - trustgraph-internal
+    volumes:
+      - /minio-data:/minio_data
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-base:/src/trustgraph-base:ro
+      - ${TRUSTGRAPH_DEV_PATH:-/home/ubuntu/Github/trustgraph}/trustgraph-ocr:/src/trustgraph-ocr:ro
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 512M
+
+  # ===========================================================================
+  # PROMPT & TEXT COMPLETION SERVICES
+  # ===========================================================================
+
+  prompt:
+    image: *trustgraph_flow_dev_image
+    command:
+      - prompt-template
+      - -p
+      - pulsar://pulsar:6650
+      - --concurrency
+      - '1'
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  prompt-rag:
+    image: *trustgraph_flow_dev_image
+    command:
+      - prompt-template
+      - -p
+      - pulsar://pulsar:6650
+      - --id
+      - prompt-rag
+      - --concurrency
+      - '1'
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  text-completion:
+    image: *trustgraph_flow_dev_image
+    command:
+      - text-completion-openai
+      - -p
+      - pulsar://pulsar:6650
+      - -x
+      - '4096'
+      - -t
+      - '0.000'
+      - --log-level
+      - DEBUG
+    environment:
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      OPENAI_TOKEN_FILE: /run/secrets/openai_token
+    secrets:
+      - openai_token
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  text-completion-rag:
+    image: *trustgraph_flow_dev_image
+    command:
+      - text-completion-openai
+      - -p
+      - pulsar://pulsar:6650
+      - --id
+      - text-completion-rag
+      - -x
+      - '4096'
+      - -t
+      - '0.000'
+      - --log-level
+      - DEBUG
+    environment:
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      OPENAI_TOKEN_FILE: /run/secrets/openai_token
+    secrets:
+      - openai_token
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # ===========================================================================
+  # QUERY SERVICES
+  # ===========================================================================
+
+  query-doc-embeddings:
+    image: *trustgraph_flow_dev_image
+    command:
+      - de-query-qdrant
+      - -p
+      - pulsar://pulsar:6650
+      - -t
+      - http://qdrant:6333
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  query-graph-embeddings:
+    image: *trustgraph_flow_dev_image
+    command:
+      - ge-query-qdrant
+      - -p
+      - pulsar://pulsar:6650
+      - -t
+      - http://qdrant:6333
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  query-objects:
+    image: *trustgraph_flow_dev_image
+    command:
+      - objects-query-cassandra
+      - -p
+      - pulsar://pulsar:6650
+      - --cassandra-host
+      - cassandra
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 512M
+
+  query-triples:
+    image: *trustgraph_flow_dev_image
+    command:
+      - triples-query-cassandra
+      - -p
+      - pulsar://pulsar:6650
+      - --cassandra-host
+      - cassandra
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 512M
+
+  # ===========================================================================
+  # STORE SERVICES
+  # ===========================================================================
+
+  store-doc-embeddings:
+    image: *trustgraph_flow_dev_image
+    command:
+      - de-write-qdrant
+      - -p
+      - pulsar://pulsar:6650
+      - -t
+      - http://qdrant:6333
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  store-graph-embeddings:
+    image: *trustgraph_flow_dev_image
+    command:
+      - ge-write-qdrant
+      - -p
+      - pulsar://pulsar:6650
+      - -t
+      - http://qdrant:6333
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  store-objects:
+    image: *trustgraph_flow_dev_image
+    command:
+      - objects-write-cassandra
+      - -p
+      - pulsar://pulsar:6650
+      - --cassandra-host
+      - cassandra
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  store-triples:
+    image: *trustgraph_flow_dev_image
+    command:
+      - triples-write-cassandra
+      - -p
+      - pulsar://pulsar:6650
+      - --cassandra-host
+      - cassandra
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 256M
+
+  # ===========================================================================
+  # STRUCTURED SERVICES
+  # ===========================================================================
+
+  structured-diag:
+    image: *trustgraph_flow_dev_image
+    command:
+      - structured-diag
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 96M
+        reservations:
+          cpus: '0.1'
+          memory: 96M
+
+  structured-query:
+    image: *trustgraph_flow_dev_image
+    command:
+      - structured-query
+      - -p
+      - pulsar://pulsar:6650
+      - --log-level
+      - DEBUG
+    networks:
+      - trustgraph-internal
+    volumes: *trustgraph_dev_volumes
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 100
+        window: 120s
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+
+  # ===========================================================================
+  # GPU-BOUND SERVICES (vLLM)
+  # ===========================================================================
+  # NOTE: vLLM requires GPU and proper NVIDIA runtime configuration.
+  # For Docker Swarm with GPU support, you MUST configure nvidia as default runtime:
+  #
+  # Edit /etc/docker/daemon.json:
+  # {
+  #   "default-runtime": "nvidia",
+  #   "runtimes": {
+  #     "nvidia": {
+  #       "path": "nvidia-container-runtime",
+  #       "runtimeArgs": []
+  #     }
+  #   }
+  # }
+  # Then: sudo systemctl restart docker
+  #
+  # This is required because Docker Swarm doesn't support the 'devices' syntax
+  # that docker-compose uses for GPU access.
+
+  vllm:
+    image: vllm/vllm-openai:latest
+    command:
+      - --model
+      - ${VLLM_MODEL:-Qwen/Qwen3-VL-4B-Instruct}
+      - --host
+      - 0.0.0.0
+      - --port
+      - '8000'
+      - --max-model-len
+      - ${VLLM_MAX_MODEL_LEN:-16384}
+      - --dtype
+      - ${VLLM_DTYPE:-auto}
+      - --gpu-memory-utilization
+      - ${VLLM_GPU_MEMORY_UTILIZATION:-0.85}
+      - --allowed-local-media-path
+      - /minio_data/${MINIO_OCR_BUCKET:-ocr-images}
+      - --trust-remote-code
+    environment:
+      # Use direct env var instead of secret file (matches docker-compose)
+      HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN}
+      HF_HOME: /root/.cache/huggingface
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    networks:
+      - trustgraph-internal
+      - trustgraph-public
+    ports:
+      - target: 8000
+        published: ${VLLM_PORT:-8001}
+        mode: host
+    # Match docker-compose volume mounts exactly
+    volumes:
+      - /minio-data:/minio_data
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface
+      - ${HOME}/.huggingface:/root/.huggingface
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 30s
+        max_attempts: 100
+        window: 300s
+      # Match docker-compose resource settings, but use realistic values
+      # that Swarm can actually reserve on this node:
+      # - Node has 8 CPUs, other services reserve ~7.9 cores
+      # - Node has 32GB RAM, other services reserve ~17GB
+      # Note: docker-compose.yaml has 256G/4CPU but doesn't enforce strictly
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 16G
+        reservations:
+          cpus: '0.1'
+          memory: 4G
