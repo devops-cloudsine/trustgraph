@@ -23,6 +23,7 @@ import logging
 import os
 import re
 import time
+import urllib.parse
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -31,8 +32,15 @@ import json
 from typing import Dict, List, Any, Optional, Set, Tuple
 
 from ... schema import Document as TGDocument, TextDocument
+from ... schema import Triples, Triple, Value, Metadata
+from ... schema import EntityContext, EntityContexts
 from ... base import FlowProcessor, ConsumerSpec, ProducerSpec
 from .minio_storage import MinioStorage, get_minio_storage
+
+# ---> rdf.py constants for image context triples
+IMAGE_CONTEXT = "http://trustgraph.ai/ns/image-context"
+IMAGE_SOURCE = "http://trustgraph.ai/ns/image-source"
+TRUSTGRAPH_ENTITIES = "http://trustgraph.ai/e/"
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -104,6 +112,22 @@ class Processor(FlowProcessor):
             ProducerSpec(
                 name="output",
                 schema=TextDocument,
+            )
+        )
+
+        # ---> on_message > [triples output] > emit IMAGE_CONTEXT/IMAGE_SOURCE triples for Graph RAG
+        self.register_specification(
+            ProducerSpec(
+                name="triples",
+                schema=Triples,
+            )
+        )
+
+        # ---> on_message > [entity-contexts output] > emit EntityContexts for graph embeddings (enables graph-retrieval)
+        self.register_specification(
+            ProducerSpec(
+                name="entity-contexts",
+                schema=EntityContexts,
             )
         )
 
@@ -211,11 +235,16 @@ class Processor(FlowProcessor):
                         await flow("output").send(r)
 
             # Process images with concurrent vLLM requests
+            # Collect triples and entity contexts for Graph RAG
+            image_triples = []
+            entity_contexts = []  # For graph embeddings
+            doc_uri = TRUSTGRAPH_ENTITIES + urllib.parse.quote(doc_id)
+            
             if all_images:
                 logger.info(f"Processing {len(all_images)} unique images with concurrent vLLM requests")
                 image_descriptions = await self._describe_images_concurrent_bytes(all_images, doc_id)
 
-                # Send image descriptions
+                # Send image descriptions and collect triples + entity contexts
                 for idx, (img_info, description) in enumerate(zip(all_images, image_descriptions)):
                     if description and description.strip():
                         image_text = f"{img_info['context']}\nDescription:\n{description}\n"
@@ -226,6 +255,60 @@ class Processor(FlowProcessor):
                             text=image_text.encode("utf-8"),
                         )
                         await flow("output").send(r)
+                        
+                        # ---> Create IMAGE_CONTEXT and IMAGE_SOURCE triples for Graph RAG
+                        slide_num = img_info.get('slide_number', idx + 1)
+                        image_uri = f"{doc_uri}/slide_{slide_num}/image_{idx + 1}"
+                        image_uri_value = Value(value=image_uri, is_uri=True)
+                        
+                        # Add IMAGE_CONTEXT triple
+                        image_triples.append(Triple(
+                            s=image_uri_value,
+                            p=Value(value=IMAGE_CONTEXT, is_uri=True),
+                            o=Value(value=description, is_uri=False),
+                        ))
+                        
+                        # Add IMAGE_SOURCE triple
+                        image_path = f"minio://ocr-images/{self._safe_id(doc_id)}/image_{idx}.png"
+                        image_triples.append(Triple(
+                            s=image_uri_value,
+                            p=Value(value=IMAGE_SOURCE, is_uri=True),
+                            o=Value(value=image_path, is_uri=False),
+                        ))
+                        
+                        # ---> Create EntityContext for graph embeddings (enables graph-retrieval to find this entity)
+                        entity_contexts.append(EntityContext(
+                            entity=image_uri_value,
+                            context=description,
+                        ))
+
+            # ---> on_message > [triples flow] > emit IMAGE_CONTEXT/IMAGE_SOURCE triples for Graph RAG
+            if image_triples:
+                triples_msg = Triples(
+                    metadata=Metadata(
+                        id=doc_id,
+                        metadata=[],
+                        user=v.metadata.user if hasattr(v.metadata, 'user') and v.metadata.user else "trustgraph",
+                        collection=v.metadata.collection if hasattr(v.metadata, 'collection') and v.metadata.collection else "default",
+                    ),
+                    triples=image_triples,
+                )
+                await flow("triples").send(triples_msg)
+                logger.info(f"Emitted {len(image_triples)} image context triples for document {doc_id}")
+
+            # ---> on_message > [entity-contexts flow] > emit EntityContexts for graph embeddings (enables graph-retrieval)
+            if entity_contexts:
+                entity_contexts_msg = EntityContexts(
+                    metadata=Metadata(
+                        id=doc_id,
+                        metadata=[],
+                        user=v.metadata.user if hasattr(v.metadata, 'user') and v.metadata.user else "trustgraph",
+                        collection=v.metadata.collection if hasattr(v.metadata, 'collection') and v.metadata.collection else "default",
+                    ),
+                    entities=entity_contexts,
+                )
+                await flow("entity-contexts").send(entity_contexts_msg)
+                logger.info(f"Emitted {len(entity_contexts)} entity contexts for graph embeddings for document {doc_id}")
 
             logger.info(f"PPTX extraction complete: {len(all_images)} images processed")
 

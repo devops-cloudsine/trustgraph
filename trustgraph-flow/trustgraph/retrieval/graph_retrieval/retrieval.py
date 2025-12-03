@@ -112,6 +112,7 @@ class Processor(FlowProcessor):
             max_subgraph_size = v.max_subgraph_size if v.max_subgraph_size else self.default_max_subgraph_size
             max_path_length = v.max_path_length if v.max_path_length else self.default_max_path_length
 
+            # ---> on_request > [Query] > get_labelgraph_with_images() for triples + image contexts
             # Create query instance
             q = Query(
                 rag = rag,
@@ -127,8 +128,8 @@ class Processor(FlowProcessor):
             # Get entities for metadata
             entities = await q.get_entities(v.query)
             
-            # Get labeled graph (triples with human-readable labels)
-            triples = await q.get_labelgraph(v.query)
+            # Get labeled graph with image contexts (triples + image data)
+            triples, image_contexts, image_sources = await q.get_labelgraph_with_images(v.query)
 
             # Format triples as list of dicts
             triples_list = [
@@ -142,18 +143,23 @@ class Processor(FlowProcessor):
                 "triple_count": str(len(triples)),
                 "max_subgraph_size": str(max_subgraph_size),
                 "max_path_length": str(max_path_length),
+                "image_context_count": str(len(image_contexts)),
+                "image_source_count": str(len(image_sources)),
             }
 
             await flow("response").send(
                 GraphRetrievalResponse(
                     triples = triples_list,
                     metadata = metadata,
+                    image_contexts = image_contexts,
+                    image_sources = image_sources,
                     error = None
                 ),
                 properties = {"id": id}
             )
 
-            logger.info(f"Retrieval complete: {len(triples)} triples from {len(entities)} entities")
+            logger.info(f"Retrieval complete: {len(triples)} triples from {len(entities)} entities, "
+                       f"{len(image_contexts)} image contexts")
 
         except Exception as e:
 
@@ -165,6 +171,8 @@ class Processor(FlowProcessor):
                 GraphRetrievalResponse(
                     triples = [],
                     metadata = {},
+                    image_contexts = {},
+                    image_sources = {},
                     error = Error(
                         type = "graph-retrieval-error",
                         message = str(e),

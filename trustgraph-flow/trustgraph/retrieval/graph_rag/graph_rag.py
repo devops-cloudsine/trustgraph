@@ -7,7 +7,10 @@ from collections import OrderedDict
 # Module logger
 logger = logging.getLogger(__name__)
 
-LABEL="http://www.w3.org/2000/01/rdf-schema#label"
+# ---> rdf.py constants > [LABEL, IMAGE_CONTEXT] > used for triple queries
+LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
+IMAGE_CONTEXT = "http://trustgraph.ai/ns/image-context"
+IMAGE_SOURCE = "http://trustgraph.ai/ns/image-source"
 
 class LRUCacheWithTTL:
     """LRU cache with TTL for label caching
@@ -284,7 +287,119 @@ class Query:
             logger.debug("Done.")
 
         return sg2
-    
+
+    # ---> get_labelgraph_with_images > [get_image_contexts] > triples_client.query for IMAGE_CONTEXT
+    async def get_image_contexts(self, entities):
+        """
+        Fetch image context descriptions for a list of entities.
+        Returns a dict mapping entity labels to their image descriptions.
+        """
+        image_contexts = {}
+        
+        if not entities:
+            return image_contexts
+            
+        if self.verbose:
+            logger.debug(f"Fetching image contexts for {len(entities)} entities...")
+        
+        # Batch query for image contexts
+        tasks = []
+        entity_list = list(entities)
+        
+        for entity in entity_list:
+            tasks.append(
+                self.rag.triples_client.query(
+                    s=entity, p=IMAGE_CONTEXT, o=None, limit=5,
+                    user=self.user, collection=self.collection,
+                )
+            )
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for entity, result in zip(entity_list, results):
+            if isinstance(result, Exception):
+                logger.warning(f"Error fetching image context for {entity}: {result}")
+                continue
+            if result:
+                # Get the label for this entity for better readability
+                label = await self.maybe_label(entity)
+                image_contexts[label] = [str(r.o) for r in result]
+        
+        if self.verbose:
+            logger.debug(f"Found image contexts for {len(image_contexts)} entities")
+            for entity, contexts in image_contexts.items():
+                logger.debug(f"  {entity}: {len(contexts)} image context(s)")
+        
+        return image_contexts
+
+    # ---> get_image_sources > [get_image_sources] > triples_client.query for IMAGE_SOURCE
+    async def get_image_sources(self, entities):
+        """
+        Fetch image source paths for a list of entities.
+        Returns a dict mapping entity labels to their image source paths.
+        """
+        image_sources = {}
+        
+        if not entities:
+            return image_sources
+            
+        if self.verbose:
+            logger.debug(f"Fetching image sources for {len(entities)} entities...")
+        
+        # Batch query for image sources
+        tasks = []
+        entity_list = list(entities)
+        
+        for entity in entity_list:
+            tasks.append(
+                self.rag.triples_client.query(
+                    s=entity, p=IMAGE_SOURCE, o=None, limit=5,
+                    user=self.user, collection=self.collection,
+                )
+            )
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for entity, result in zip(entity_list, results):
+            if isinstance(result, Exception):
+                logger.warning(f"Error fetching image source for {entity}: {result}")
+                continue
+            if result:
+                label = await self.maybe_label(entity)
+                image_sources[label] = [str(r.o) for r in result]
+        
+        if self.verbose:
+            logger.debug(f"Found image sources for {len(image_sources)} entities")
+        
+        return image_sources
+
+    # ---> Processor.on_request > [get_labelgraph_with_images] > returns (triples, image_contexts, image_sources)
+    async def get_labelgraph_with_images(self, query):
+        """
+        Extended version of get_labelgraph that also fetches image contexts.
+        Returns tuple of (labeled_triples, image_contexts, image_sources).
+        """
+        # Get the labeled subgraph
+        sg2 = await self.get_labelgraph(query)
+        
+        # Collect all unique entities (URIs) from the subgraph before label resolution
+        subgraph = await self.get_subgraph(query)
+        entities_to_check = set()
+        for s, p, o in subgraph:
+            entities_to_check.add(s)
+            entities_to_check.add(o)
+        
+        # Fetch image contexts and sources for all entities
+        image_contexts = await self.get_image_contexts(entities_to_check)
+        image_sources = await self.get_image_sources(entities_to_check)
+        
+        if self.verbose:
+            logger.debug(f"Labelgraph with images: {len(sg2)} triples, "
+                        f"{len(image_contexts)} image contexts, "
+                        f"{len(image_sources)} image sources")
+        
+        return sg2, image_contexts, image_sources
+
 class GraphRag:
     """
     CRITICAL SECURITY:
@@ -313,6 +428,7 @@ class GraphRag:
         if self.verbose:
             logger.debug("GraphRag initialized")
 
+    # ---> Processor.on_request > [GraphRag.query] > prompt_client.kg_prompt with image contexts
     async def query(
             self, query, user = "trustgraph", collection = "default",
             entity_limit = 50, triple_limit = 30, max_subgraph_size = 1000,
@@ -330,14 +446,20 @@ class GraphRag:
             max_path_length = max_path_length,
         )
 
-        kg = await q.get_labelgraph(query)
+        # Get labeled graph with image contexts for enhanced RAG
+        kg, image_contexts, image_sources = await q.get_labelgraph_with_images(query)
 
         if self.verbose:
             logger.debug("Invoking LLM...")
             logger.debug(f"Knowledge graph: {kg}")
+            logger.debug(f"Image contexts: {len(image_contexts)} entities have image descriptions")
             logger.debug(f"Query: {query}")
 
-        resp = await self.prompt_client.kg_prompt(query, kg)
+        # Pass image contexts to the prompt client if available
+        resp = await self.prompt_client.kg_prompt(
+            query, kg, 
+            image_contexts=image_contexts if image_contexts else None
+        )
 
         if self.verbose:
             logger.debug("Query processing complete")

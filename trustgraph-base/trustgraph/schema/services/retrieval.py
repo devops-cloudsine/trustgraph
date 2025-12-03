@@ -47,10 +47,13 @@ class GraphRetrievalQuery(Record):
     max_subgraph_size = Integer()
     max_path_length = Integer()
 
+# ---> graph_retrieval/retrieval.py > [GraphRetrievalResponse] > includes image contexts for vision support
 class GraphRetrievalResponse(Record):
     error = Error()
     triples = Array(Map(String()))  # List of {s, p, o} dicts
     metadata = Map(String())  # {entity_count, triple_count, etc.}
+    image_contexts = Map(Array(String()))  # {entity_label: [image descriptions]}
+    image_sources = Map(Array(String()))  # {entity_label: [image paths/URLs]}
 
 ############################################################################
 

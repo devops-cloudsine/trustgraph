@@ -51,23 +51,32 @@
           },
           "pdf-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}"
           },
           "pdf-ocr:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "pptx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "docx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "image-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "xlsx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
@@ -272,23 +281,32 @@
           },
           "pdf-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}"
           },
           "pdf-ocr:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "pptx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "docx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "image-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "xlsx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
@@ -525,23 +543,32 @@
           },
           "pdf-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}"
           },
           "pdf-ocr:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "pptx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "docx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "image-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "xlsx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
@@ -794,23 +821,32 @@
           },
           "pdf-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}"
           },
           "pdf-ocr:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "pptx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "docx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "image-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "xlsx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
@@ -1081,23 +1117,32 @@
           },
           "pdf-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}"
           },
           "pdf-ocr:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "pptx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "docx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "image-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "xlsx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
@@ -1291,23 +1336,32 @@
           },
           "pdf-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}"
           },
           "pdf-ocr:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "pptx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "docx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "image-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "xlsx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
@@ -1515,23 +1569,32 @@
           },
           "pdf-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}"
           },
           "pdf-ocr:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "pptx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "docx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "image-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "xlsx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
@@ -1745,23 +1808,32 @@
           },
           "pdf-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}"
           },
           "pdf-ocr:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "pptx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "docx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "image-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
-            "output": "persistent://tg/flow/text-document-load:{id}"
+            "output": "persistent://tg/flow/text-document-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}"
           },
           "xlsx-decoder:{id}": {
             "input": "persistent://tg/flow/document-load:{id}",
@@ -2131,31 +2203,40 @@
       "pdf-decoder": {
         "default": {
           "input": "persistent://tg/flow/document-load:default",
-          "output": "persistent://tg/flow/text-document-load:default"
+          "output": "persistent://tg/flow/text-document-load:default",
+          "triples": "persistent://tg/flow/triples-store:default"
         }
       },
       "pdf-ocr": {
         "default": {
           "input": "persistent://tg/flow/document-load:default",
-          "output": "persistent://tg/flow/text-document-load:default"
+          "output": "persistent://tg/flow/text-document-load:default",
+          "triples": "persistent://tg/flow/triples-store:default",
+          "entity-contexts": "persistent://tg/flow/entity-contexts-load:default"
         }
       },
       "docx-decoder": {
         "default": {
           "input": "persistent://tg/flow/document-load:default",
-          "output": "persistent://tg/flow/text-document-load:default"
+          "output": "persistent://tg/flow/text-document-load:default",
+          "triples": "persistent://tg/flow/triples-store:default",
+          "entity-contexts": "persistent://tg/flow/entity-contexts-load:default"
         }
       },
       "pptx-decoder": {
         "default": {
           "input": "persistent://tg/flow/document-load:default",
-          "output": "persistent://tg/flow/text-document-load:default"
+          "output": "persistent://tg/flow/text-document-load:default",
+          "triples": "persistent://tg/flow/triples-store:default",
+          "entity-contexts": "persistent://tg/flow/entity-contexts-load:default"
         }
       },
       "image-decoder": {
         "default": {
           "input": "persistent://tg/flow/document-load:default",
-          "output": "persistent://tg/flow/text-document-load:default"
+          "output": "persistent://tg/flow/text-document-load:default",
+          "triples": "persistent://tg/flow/triples-store:default",
+          "entity-contexts": "persistent://tg/flow/entity-contexts-load:default"
         }
       },
       "prompt": {
@@ -2215,6 +2296,28 @@
       "triples-write": {
         "default": {
           "input": "persistent://tg/flow/triples-store:default"
+        }
+      },
+      "graph-retrieval": {
+        "default": {
+          "request": "non-persistent://tg/request/graph-retrieval:default",
+          "response": "non-persistent://tg/response/graph-retrieval:default",
+          "embeddings-request": "non-persistent://tg/request/embeddings:default",
+          "embeddings-response": "non-persistent://tg/response/embeddings:default",
+          "graph-embeddings-request": "non-persistent://tg/request/graph-embeddings:default",
+          "graph-embeddings-response": "non-persistent://tg/response/graph-embeddings:default",
+          "triples-request": "non-persistent://tg/request/triples:default",
+          "triples-response": "non-persistent://tg/response/triples:default"
+        }
+      },
+      "document-retrieval": {
+        "default": {
+          "request": "non-persistent://tg/request/document-retrieval:default",
+          "response": "non-persistent://tg/response/document-retrieval:default",
+          "embeddings-request": "non-persistent://tg/request/embeddings:default",
+          "embeddings-response": "non-persistent://tg/response/embeddings:default",
+          "document-embeddings-request": "non-persistent://tg/request/document-embeddings:default",
+          "document-embeddings-response": "non-persistent://tg/response/document-embeddings:default"
         }
       }
     },

@@ -47,16 +47,23 @@ class PromptClient(RequestResponse):
             timeout = timeout,
         )
 
-    async def kg_prompt(self, query, kg, timeout=600):
+    # ---> GraphRag.query > [kg_prompt] > prompt service with knowledge graph + image contexts
+    async def kg_prompt(self, query, kg, image_contexts=None, timeout=600):
+        variables = {
+            "query": query,
+            "knowledge": [
+                { "s": v[0], "p": v[1], "o": v[2] }
+                for v in kg
+            ]
+        }
+        
+        # Include image contexts if available for vision-enhanced RAG
+        if image_contexts:
+            variables["image_contexts"] = image_contexts
+            
         return await self.prompt(
             id = "kg-prompt",
-            variables = {
-                "query": query,
-                "knowledge": [
-                    { "s": v[0], "p": v[1], "o": v[2] }
-                    for v in kg
-                ]
-            },
+            variables = variables,
             timeout = timeout,
         )
 

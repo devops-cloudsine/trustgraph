@@ -11,6 +11,7 @@ import base64
 import logging
 import os
 import re
+import urllib.parse
 from io import BytesIO
 from pathlib import Path
 from pdf2image import convert_from_bytes
@@ -18,8 +19,15 @@ import requests
 import json
 
 from ... schema import Document, TextDocument, Metadata
+from ... schema import Triples, Triple, Value
+from ... schema import EntityContext, EntityContexts
 from ... base import FlowProcessor, ConsumerSpec, ProducerSpec
 from .minio_storage import MinioStorage, get_minio_storage
+
+# ---> rdf.py constants for image context triples
+IMAGE_CONTEXT = "http://trustgraph.ai/ns/image-context"
+IMAGE_SOURCE = "http://trustgraph.ai/ns/image-source"
+TRUSTGRAPH_ENTITIES = "http://trustgraph.ai/e/"
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -68,9 +76,25 @@ class Processor(FlowProcessor):
             )
         )
 
+        # ---> on_message > [triples output] > emit IMAGE_CONTEXT/IMAGE_SOURCE triples for Graph RAG
+        self.register_specification(
+            ProducerSpec(
+                name = "triples",
+                schema = Triples,
+            )
+        )
+
+        # ---> on_message > [entity-contexts output] > emit EntityContexts for graph embeddings (enables graph-retrieval)
+        self.register_specification(
+            ProducerSpec(
+                name = "entity-contexts",
+                schema = EntityContexts,
+            )
+        )
+
         logger.info("PDF image extraction + vLLM description processor initialized")
 
-    # // ---> Pulsar consumer(input) > [on_message] > save page images to MinIO, vLLM describe -> flow('output')
+    # // ---> Pulsar consumer(input) > [on_message] > save page images to MinIO, vLLM describe -> flow('output') + flow('triples')
     async def on_message(self, msg, consumer, flow):
 
         logger.info("PDF message received for image extraction")
@@ -106,6 +130,13 @@ class Processor(FlowProcessor):
             logger.warning("Failed to save original PDF to MinIO, continuing with processing")
 
         pages = convert_from_bytes(blob)
+        
+        # Collect all image context triples and entity contexts for this document
+        image_triples = []
+        entity_contexts = []  # For graph embeddings
+        
+        # Create document entity URI
+        doc_uri = TRUSTGRAPH_ENTITIES + urllib.parse.quote(doc_id)
 
         for ix, page in enumerate(pages):
             filename = f"page_{ix + 1}.png"
@@ -145,6 +176,62 @@ class Processor(FlowProcessor):
             )
 
             await flow("output").send(r)
+            
+            # ---> Create IMAGE_CONTEXT and IMAGE_SOURCE triples for Graph RAG
+            # Create page entity URI
+            page_uri = f"{doc_uri}/page_{ix + 1}"
+            page_uri_value = Value(value=page_uri, is_uri=True)
+            
+            # Add IMAGE_CONTEXT triple (document -> description)
+            image_triples.append(Triple(
+                s=page_uri_value,
+                p=Value(value=IMAGE_CONTEXT, is_uri=True),
+                o=Value(value=description, is_uri=False),
+            ))
+            
+            # Add IMAGE_SOURCE triple (document -> image path)
+            if object_name:
+                image_path = f"minio://{object_name}"
+                image_triples.append(Triple(
+                    s=page_uri_value,
+                    p=Value(value=IMAGE_SOURCE, is_uri=True),
+                    o=Value(value=image_path, is_uri=False),
+                ))
+            
+            # ---> Create EntityContext for graph embeddings (enables graph-retrieval to find this entity)
+            if description and description.strip() and not description.startswith("Description unavailable"):
+                entity_contexts.append(EntityContext(
+                    entity=page_uri_value,
+                    context=description,
+                ))
+
+        # ---> on_message > [triples flow] > emit IMAGE_CONTEXT/IMAGE_SOURCE triples for Graph RAG
+        if image_triples:
+            triples_msg = Triples(
+                metadata=Metadata(
+                    id=doc_id,
+                    metadata=[],
+                    user=v.metadata.user if hasattr(v.metadata, 'user') and v.metadata.user else "trustgraph",
+                    collection=v.metadata.collection if hasattr(v.metadata, 'collection') and v.metadata.collection else "default",
+                ),
+                triples=image_triples,
+            )
+            await flow("triples").send(triples_msg)
+            logger.info(f"Emitted {len(image_triples)} image context triples for document {doc_id}")
+
+        # ---> on_message > [entity-contexts flow] > emit EntityContexts for graph embeddings (enables graph-retrieval)
+        if entity_contexts:
+            entity_contexts_msg = EntityContexts(
+                metadata=Metadata(
+                    id=doc_id,
+                    metadata=[],
+                    user=v.metadata.user if hasattr(v.metadata, 'user') and v.metadata.user else "trustgraph",
+                    collection=v.metadata.collection if hasattr(v.metadata, 'collection') and v.metadata.collection else "default",
+                ),
+                entities=entity_contexts,
+            )
+            await flow("entity-contexts").send(entity_contexts_msg)
+            logger.info(f"Emitted {len(entity_contexts)} entity contexts for graph embeddings for document {doc_id}")
 
         logger.info("PDF page image descriptions complete")
 

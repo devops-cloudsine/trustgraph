@@ -108,6 +108,7 @@ class GraphRetrievalRequestTranslator(MessageTranslator):
         }
 
 
+# ---> graph_retrieval/retrieval.py > [GraphRetrievalResponseTranslator] > includes image contexts/sources
 class GraphRetrievalResponseTranslator(MessageTranslator):
     """Translator for GraphRetrievalResponse schema objects"""
     
@@ -124,7 +125,9 @@ class GraphRetrievalResponseTranslator(MessageTranslator):
             }
         return {
             "triples": obj.triples,
-            "metadata": obj.metadata
+            "metadata": obj.metadata,
+            "image_contexts": obj.image_contexts if obj.image_contexts else {},
+            "image_sources": obj.image_sources if obj.image_sources else {}
         }
     
     def from_response_with_completion(self, obj: GraphRetrievalResponse) -> Tuple[Dict[str, Any], bool]:
