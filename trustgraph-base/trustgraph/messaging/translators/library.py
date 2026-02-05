@@ -1,5 +1,5 @@
 from typing import Dict, Any, Tuple, Optional
-from ...schema import LibrarianRequest, LibrarianResponse, DocumentMetadata, ProcessingMetadata, Criteria, DocumentStatus
+from ...schema import LibrarianRequest, LibrarianResponse, DocumentMetadata, ProcessingMetadata, Criteria, DocumentStatus, GraphStatus
 from .base import MessageTranslator
 from .metadata import DocumentMetadataTranslator, ProcessingMetadataTranslator
 
@@ -26,6 +26,42 @@ class DocumentStatusTranslator(MessageTranslator):
             "status": obj.status or "",
             "embedding-count": obj.embedding_count or 0,
             "chunk-count": obj.chunk_count or 0,
+            "last-updated": obj.last_updated or 0,
+        }
+
+
+class GraphStatusTranslator(MessageTranslator):
+    """Translator for GraphStatus schema objects"""
+    
+    def to_pulsar(self, data: Dict[str, Any]) -> GraphStatus:
+        return GraphStatus(
+            document_id=data.get("document-id", ""),
+            user=data.get("user", ""),
+            collection=data.get("collection", ""),
+            status=data.get("status", ""),
+            triples_count=data.get("triples-count", 0),
+            graph_embeddings_count=data.get("graph-embeddings-count", 0),
+            chunks_total=data.get("chunks-total", 0),
+            chunks_processed=data.get("chunks-processed", 0),
+            triples_stored=data.get("triples-stored", 0),
+            embeddings_stored=data.get("embeddings-stored", 0),
+            failed_chunks=data.get("failed-chunks", 0),
+            last_updated=data.get("last-updated", 0),
+        )
+    
+    def from_pulsar(self, obj: GraphStatus) -> Dict[str, Any]:
+        return {
+            "document-id": obj.document_id or "",
+            "user": obj.user or "",
+            "collection": obj.collection or "",
+            "status": obj.status or "",
+            "triples-count": obj.triples_count or 0,
+            "graph-embeddings-count": obj.graph_embeddings_count or 0,
+            "chunks-total": getattr(obj, 'chunks_total', None) or 0,
+            "chunks-processed": getattr(obj, 'chunks_processed', None) or 0,
+            "triples-stored": getattr(obj, 'triples_stored', None) or 0,
+            "embeddings-stored": getattr(obj, 'embeddings_stored', None) or 0,
+            "failed-chunks": getattr(obj, 'failed_chunks', None) or 0,
             "last-updated": obj.last_updated or 0,
         }
 
@@ -119,6 +155,7 @@ class LibraryResponseTranslator(MessageTranslator):
         self.doc_metadata_translator = DocumentMetadataTranslator()
         self.proc_metadata_translator = ProcessingMetadataTranslator()
         self.doc_status_translator = DocumentStatusTranslator()
+        self.graph_status_translator = GraphStatusTranslator()
     
     def to_pulsar(self, data: Dict[str, Any]) -> LibrarianResponse:
         raise NotImplementedError("Response translation to Pulsar not typically needed")
@@ -146,6 +183,9 @@ class LibraryResponseTranslator(MessageTranslator):
         
         if obj.document_status:
             result["document-status"] = self.doc_status_translator.from_pulsar(obj.document_status)
+        
+        if obj.graph_status:
+            result["graph-status"] = self.graph_status_translator.from_pulsar(obj.graph_status)
         
         return result
     

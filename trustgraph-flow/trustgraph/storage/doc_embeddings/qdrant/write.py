@@ -112,6 +112,17 @@ class Processor(DocumentEmbeddingsStoreService):
                         size=vector_dim, distance=Distance.COSINE
                     ),
                 )
+                # Create payload index for efficient filtering by document_id
+                try:
+                    self.qdrant.create_payload_index(
+                        collection_name=collection,
+                        field_name="document_id",
+                        field_schema="keyword"
+                    )
+                    logger.info(f"Created payload index on document_id for {collection}")
+                except Exception as e:
+                    # Index might already exist, ignore
+                    logger.debug(f"Payload index creation (may already exist): {e}")
         except Exception as e:
             logger.error(f"Failed ensuring collection {collection}: {e}", exc_info=True)
             raise
@@ -131,6 +142,8 @@ class Processor(DocumentEmbeddingsStoreService):
                             vector=vec,
                             payload={
                                 "doc": chunk,
+                                "document_id": message.metadata.id,
+                                "user": message.metadata.user
                             }
                         )
                     ]

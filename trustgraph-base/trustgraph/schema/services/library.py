@@ -1,5 +1,5 @@
 
-from pulsar.schema import Record, Bytes, String, Array, Long
+from pulsar.schema import Record, Bytes, String, Array, Long, Integer
 from ..core.primitives import Triple, Error
 from ..core.topic import topic
 from ..core.metadata import Metadata
@@ -88,6 +88,20 @@ class DocumentStatus(Record):
     chunk_count = Long()
     last_updated = Long()  # Unix timestamp in milliseconds
 
+class GraphStatus(Record):
+    document_id = String()
+    user = String()
+    collection = String()
+    status = String()  # "not_found" | "pending" | "processing" | "completed" | "failed"
+    triples_count = Long()
+    graph_embeddings_count = Long()
+    chunks_total = Integer()           # Total number of chunks created from document
+    chunks_processed = Integer()       # Number of chunks fully processed (min of triples_stored, embeddings_stored)
+    triples_stored = Integer()         # Number of chunks with triples stored in user keyspace
+    embeddings_stored = Integer()      # Number of chunks with graph embeddings stored in vector DB
+    failed_chunks = Integer()          # Number of chunks that failed processing
+    last_updated = Long()  # Unix timestamp in milliseconds
+
 class LibrarianRequest(Record):
 
     # add-document, remove-document, update-document, get-document-metadata,
@@ -127,6 +141,7 @@ class LibrarianResponse(Record):
     document_metadatas = Array(DocumentMetadata())
     processing_metadatas = Array(ProcessingMetadata())
     document_status = DocumentStatus()
+    graph_status = GraphStatus()
 
 # FIXME: Is this right?  Using persistence on librarian so that
 # message chunking works

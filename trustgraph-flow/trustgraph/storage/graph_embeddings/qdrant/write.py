@@ -12,8 +12,10 @@ import logging
 from .... base import GraphEmbeddingsStoreService
 from .... base import AsyncProcessor, Consumer, Producer
 from .... base import ConsumerMetrics, ProducerMetrics
+from .... base.cassandra_config import resolve_cassandra_config
 from .... schema import StorageManagementRequest, StorageManagementResponse, Error
 from .... schema import vector_storage_management_topic, storage_management_response_topic
+from .... tables.library import LibraryTableStore
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -37,6 +39,20 @@ class Processor(GraphEmbeddingsStoreService):
         )
 
         self.qdrant = QdrantClient(url=store_uri, api_key=api_key)
+
+        # Initialize library store for chunk progress tracking
+        hosts, username, password = resolve_cassandra_config(
+            host=params.get("cassandra_host"),
+            username=params.get("cassandra_username"),
+            password=params.get("cassandra_password")
+        )
+
+        self.library_store = LibraryTableStore(
+            cassandra_host=hosts,
+            cassandra_username=username,
+            cassandra_password=password,
+            keyspace="librarian",
+        )
 
         # Set up storage management if base class attributes are available
         # (they may not be in unit tests)
@@ -94,10 +110,12 @@ class Processor(GraphEmbeddingsStoreService):
             await self.storage_response_producer.start()
 
     async def store_graph_embeddings(self, message):
+        logger.info(f"store_graph_embeddings called for document {message.metadata.id}, user {message.metadata.user}, collection {message.metadata.collection}, entities count: {len(message.entities) if message.entities else 0}")
 
         for entity in message.entities:
 
-            if entity.entity.value == "" or entity.entity.value is None: return
+            if entity.entity.value == "" or entity.entity.value is None: 
+                continue
 
             for vec in entity.vectors:
 
@@ -113,10 +131,36 @@ class Processor(GraphEmbeddingsStoreService):
                             vector=vec,
                             payload={
                                 "entity": entity.entity.value,
+                                "document_id": message.metadata.id,
+                                "user": message.metadata.user
                             }
                         )
                     ]
                 )
+        
+        # Track progress: graph embeddings stored for this chunk (using chunk_id if available)
+        chunk_id = getattr(message.metadata, 'chunk_id', None) or ""
+        logger.info(f"About to mark embeddings_stored for document {message.metadata.id}, chunk_id={chunk_id}, user {message.metadata.user}")
+        try:
+            if not hasattr(self, 'library_store') or self.library_store is None:
+                logger.error("library_store is not initialized!")
+            else:
+                if chunk_id:
+                    await self.library_store.mark_chunk_embeddings_stored(
+                        user=message.metadata.user,
+                        document_id=message.metadata.id,
+                        chunk_id=chunk_id
+                    )
+                    logger.info(f"Marked embeddings_stored for chunk {chunk_id} of document {message.metadata.id}")
+                else:
+                    # Fallback to old method if chunk_id not available
+                    await self.library_store.increment_embeddings_stored(
+                        user=message.metadata.user,
+                        document_id=message.metadata.id
+                    )
+                    logger.info(f"Incremented embeddings_stored for {message.metadata.id} (no chunk_id)")
+        except Exception as e:
+            logger.error(f"Failed to update chunk progress: {e}", exc_info=True)
 
     @staticmethod
     def add_args(parser):
@@ -182,6 +226,17 @@ class Processor(GraphEmbeddingsStoreService):
                     )
                 )
                 logger.info(f"Created Qdrant collection: {collection_name}")
+                # Create payload index for efficient filtering by document_id
+                try:
+                    self.qdrant.create_payload_index(
+                        collection_name=collection_name,
+                        field_name="document_id",
+                        field_schema="keyword"
+                    )
+                    logger.info(f"Created payload index on document_id for {collection_name}")
+                except Exception as e:
+                    # Index might already exist, ignore
+                    logger.debug(f"Payload index creation (may already exist): {e}")
 
             # Send success response
             response = StorageManagementResponse(error=None)

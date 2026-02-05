@@ -32,6 +32,11 @@ class LibraryTableStore:
         if isinstance(cassandra_host, str):
             cassandra_host = [h.strip() for h in cassandra_host.split(',')]
 
+        # Store connection details for graph database access
+        self.cassandra_host = cassandra_host
+        self.cassandra_username = cassandra_username
+        self.cassandra_password = cassandra_password
+
         if cassandra_username and cassandra_password:
             ssl_context = SSLContext(PROTOCOL_TLSv1_2)
             auth_provider = PlainTextAuthProvider(
@@ -111,6 +116,20 @@ class LibraryTableStore:
             );
         """);
 
+        logger.debug("processing collection index...")
+
+        self.cassandra.execute("""
+            CREATE INDEX IF NOT EXISTS processing_collection
+            ON processing (collection)
+        """);
+
+        logger.debug("processing document_id index...")
+
+        self.cassandra.execute("""
+            CREATE INDEX IF NOT EXISTS processing_document_id
+            ON processing (document_id)
+        """);
+
         logger.debug("collections table...")
 
         self.cassandra.execute("""
@@ -123,6 +142,35 @@ class LibraryTableStore:
                 created_at timestamp,
                 updated_at timestamp,
                 PRIMARY KEY (user, collection)
+            );
+        """);
+
+        logger.debug("chunk_progress table...")
+
+        self.cassandra.execute("""
+            CREATE TABLE IF NOT EXISTS chunk_progress (
+                user text,
+                document_id text,
+                total_chunks int,
+                triples_stored int,
+                embeddings_stored int,
+                failed_chunks int,
+                last_updated timestamp,
+                PRIMARY KEY (user, document_id)
+            );
+        """);
+
+        logger.debug("chunk_processing_status table...")
+
+        self.cassandra.execute("""
+            CREATE TABLE IF NOT EXISTS chunk_processing_status (
+                user text,
+                document_id text,
+                chunk_id text,
+                triples_stored boolean,
+                embeddings_stored boolean,
+                last_updated timestamp,
+                PRIMARY KEY ((user, document_id), chunk_id)
             );
         """);
 
@@ -188,6 +236,24 @@ class LibraryTableStore:
             ALLOW FILTERING
         """)
 
+        # Get document IDs by collection (via processing table)
+        # Note: May return duplicate document_ids, dedup in application code
+        self.list_document_ids_by_collection_stmt = self.cassandra.prepare("""
+            SELECT document_id, user
+            FROM processing
+            WHERE collection = ?
+            ALLOW FILTERING
+        """)
+
+        # Get document IDs by user and collection (via processing table)
+        # Note: May return duplicate document_ids, dedup in application code
+        self.list_document_ids_by_user_collection_stmt = self.cassandra.prepare("""
+            SELECT document_id
+            FROM processing
+            WHERE user = ? AND collection = ?
+            ALLOW FILTERING
+        """)
+
         self.insert_processing_stmt = self.cassandra.prepare("""
             INSERT INTO processing
             (
@@ -245,6 +311,57 @@ class LibraryTableStore:
             FROM collections
             WHERE user = ? AND collection = ?
             LIMIT 1
+        """)
+
+        # Chunk progress tracking statements
+        self.init_chunk_progress_stmt = self.cassandra.prepare("""
+            INSERT INTO chunk_progress 
+            (user, document_id, total_chunks, triples_stored, embeddings_stored, failed_chunks, last_updated)
+            VALUES (?, ?, ?, 0, 0, 0, ?)
+            IF NOT EXISTS
+        """)
+
+        self.increment_triples_stored_stmt = self.cassandra.prepare("""
+            UPDATE chunk_progress 
+            SET triples_stored = ?, last_updated = ?
+            WHERE user = ? AND document_id = ?
+        """)
+
+        self.increment_embeddings_stored_stmt = self.cassandra.prepare("""
+            UPDATE chunk_progress 
+            SET embeddings_stored = ?, last_updated = ?
+            WHERE user = ? AND document_id = ?
+        """)
+
+        self.increment_failed_chunks_stmt = self.cassandra.prepare("""
+            UPDATE chunk_progress 
+            SET failed_chunks = ?, last_updated = ?
+            WHERE user = ? AND document_id = ?
+        """)
+
+        self.get_chunk_progress_stmt = self.cassandra.prepare("""
+            SELECT total_chunks, triples_stored, embeddings_stored, failed_chunks, last_updated
+            FROM chunk_progress
+            WHERE user = ? AND document_id = ?
+        """)
+
+        # Chunk processing status tracking (unique chunk_ids)
+        self.mark_chunk_triples_stored_stmt = self.cassandra.prepare("""
+            INSERT INTO chunk_processing_status 
+            (user, document_id, chunk_id, triples_stored, embeddings_stored, last_updated)
+            VALUES (?, ?, ?, true, false, ?)
+        """)
+
+        self.mark_chunk_embeddings_stored_stmt = self.cassandra.prepare("""
+            UPDATE chunk_processing_status 
+            SET embeddings_stored = true, last_updated = ?
+            WHERE user = ? AND document_id = ? AND chunk_id = ?
+        """)
+
+        self.get_chunk_processing_status_stmt = self.cassandra.prepare("""
+            SELECT chunk_id, triples_stored, embeddings_stored
+            FROM chunk_processing_status
+            WHERE user = ? AND document_id = ?
         """)
 
         self.list_processing_stmt = self.cassandra.prepare("""
@@ -361,47 +478,172 @@ class LibraryTableStore:
 
         logger.debug("Delete complete")
 
-    async def list_documents(self, user):
+    async def list_documents(self, user=None, collection=None):
+        """
+        List documents filtered by user, collection, or both.
+        
+        Args:
+            user: Optional user ID to filter by
+            collection: Optional collection ID to filter by
+            
+        Returns:
+            List of DocumentMetadata objects
+            
+        Raises:
+            ValueError: If neither user nor collection is provided
+        """
+        if not user and not collection:
+            raise ValueError("Either user or collection must be provided")
 
-        logger.debug("List documents...")
+        logger.debug(f"List documents... user={user}, collection={collection}")
 
-        while True:
-
-            try:
-
-                resp = self.cassandra.execute(
-                    self.list_document_stmt,
-                    (user,)
-                )
-
-                break
-
-            except Exception as e:
-                logger.error("Exception occurred", exc_info=True)
-                raise e
-
-
-        lst = [
-            DocumentMetadata(
-                id = row[0],
-                user = user,
-                time = int(time.mktime(row[1].timetuple())),
-                kind = row[2],
-                title = row[3],
-                comments = row[4],
-                metadata = [
-                    Triple(
-                        s=Value(value=m[0], is_uri=m[1]),
-                        p=Value(value=m[2], is_uri=m[3]),
-                        o=Value(value=m[4], is_uri=m[5])
+        # Case 1: Only user provided (existing behavior)
+        if user and not collection:
+            while True:
+                try:
+                    resp = self.cassandra.execute(
+                        self.list_document_stmt,
+                        (user,)
                     )
-                    for m in row[5]
-                ],
-                tags = row[6] if row[6] else [],
-                object_id = row[7],
-            )
-            for row in resp
-        ]
+                    break
+                except Exception as e:
+                    logger.error("Exception occurred", exc_info=True)
+                    raise e
+
+            lst = [
+                DocumentMetadata(
+                    id = row[0],
+                    user = user,
+                    time = int(time.mktime(row[1].timetuple())),
+                    kind = row[2],
+                    title = row[3],
+                    comments = row[4],
+                    metadata = [
+                        Triple(
+                            s=Value(value=m[0], is_uri=m[1]),
+                            p=Value(value=m[2], is_uri=m[3]),
+                            o=Value(value=m[4], is_uri=m[5])
+                        )
+                        for m in row[5]
+                    ],
+                    tags = row[6] if row[6] else [],
+                    object_id = row[7],
+                )
+                for row in resp
+            ]
+
+        # Case 2: Both user and collection provided
+        elif user and collection:
+            # First get document IDs from processing table
+            while True:
+                try:
+                    resp = self.cassandra.execute(
+                        self.list_document_ids_by_user_collection_stmt,
+                        (user, collection)
+                    )
+                    break
+                except Exception as e:
+                    logger.error("Exception occurred", exc_info=True)
+                    raise e
+
+            # Deduplicate document IDs (processing table may have multiple entries per document)
+            document_ids = set(row[0] for row in resp)
+            
+            if not document_ids:
+                logger.debug("No documents found for user and collection")
+                return []
+
+            # Then get document metadata for those IDs
+            lst = []
+            for doc_id in document_ids:
+                try:
+                    doc_resp = self.cassandra.execute(
+                        self.get_document_stmt,
+                        (user, doc_id)
+                    )
+                    for row in doc_resp:
+                        lst.append(
+                            DocumentMetadata(
+                                id = doc_id,
+                                user = user,
+                                time = int(time.mktime(row[0].timetuple())),
+                                kind = row[1],
+                                title = row[2],
+                                comments = row[3],
+                                metadata = [
+                                    Triple(
+                                        s=Value(value=m[0], is_uri=m[1]),
+                                        p=Value(value=m[2], is_uri=m[3]),
+                                        o=Value(value=m[4], is_uri=m[5])
+                                    )
+                                    for m in row[4]
+                                ],
+                                tags = row[5] if row[5] else [],
+                                object_id = row[6],
+                            )
+                        )
+                except Exception as e:
+                    logger.warning(f"Could not get document {doc_id}: {e}")
+                    continue
+
+        # Case 3: Only collection provided
+        else:  # collection and not user
+            # First get document IDs from processing table
+            while True:
+                try:
+                    resp = self.cassandra.execute(
+                        self.list_document_ids_by_collection_stmt,
+                        (collection,)
+                    )
+                    break
+                except Exception as e:
+                    logger.error("Exception occurred", exc_info=True)
+                    raise e
+
+            # Build map of doc_id -> user (deduplicate using dict)
+            # If same doc_id appears multiple times, last user wins
+            doc_id_user_map = {}
+            for row in resp:
+                doc_id = row[0]
+                doc_user = row[1]
+                doc_id_user_map[doc_id] = doc_user
+            
+            if not doc_id_user_map:
+                logger.debug("No documents found for collection")
+                return []
+
+            # Then get document metadata for those IDs
+            lst = []
+            for doc_id, doc_user in doc_id_user_map.items():
+                try:
+                    doc_resp = self.cassandra.execute(
+                        self.get_document_stmt,
+                        (doc_user, doc_id)
+                    )
+                    for row in doc_resp:
+                        lst.append(
+                            DocumentMetadata(
+                                id = doc_id,
+                                user = doc_user,
+                                time = int(time.mktime(row[0].timetuple())),
+                                kind = row[1],
+                                title = row[2],
+                                comments = row[3],
+                                metadata = [
+                                    Triple(
+                                        s=Value(value=m[0], is_uri=m[1]),
+                                        p=Value(value=m[2], is_uri=m[3]),
+                                        o=Value(value=m[4], is_uri=m[5])
+                                    )
+                                    for m in row[4]
+                                ],
+                                tags = row[5] if row[5] else [],
+                                object_id = row[6],
+                            )
+                        )
+                except Exception as e:
+                    logger.warning(f"Could not get document {doc_id}: {e}")
+                    continue
 
         logger.debug("Done")
 
@@ -442,7 +684,7 @@ class LibraryTableStore:
                         o=Value(value=m[4], is_uri=m[5])
                     )
                     for m in row[4]
-                ],
+                ] if row[4] else [],
                 tags = row[5] if row[5] else [],
                 object_id = row[6],
             )
@@ -819,3 +1061,124 @@ class LibraryTableStore:
         except Exception as e:
             logger.error(f"Error creating collection: {e}")
             raise
+
+    async def init_chunk_progress(self, user, document_id, total_chunks):
+        """Initialize chunk progress tracking for a document"""
+        when = int(time.time() * 1000)
+        await asyncio.get_event_loop().run_in_executor(
+            None, self.cassandra.execute,
+            self.init_chunk_progress_stmt,
+            (user, document_id, total_chunks, when)
+        )
+
+    async def mark_chunk_triples_stored(self, user, document_id, chunk_id):
+        """Mark a specific chunk_id as having triples stored (idempotent)"""
+        when = int(time.time() * 1000)
+        await asyncio.get_event_loop().run_in_executor(
+            None, self.cassandra.execute,
+            self.mark_chunk_triples_stored_stmt,
+            (user, document_id, chunk_id, when)
+        )
+
+    async def mark_chunk_embeddings_stored(self, user, document_id, chunk_id):
+        """Mark a specific chunk_id as having embeddings stored (idempotent)"""
+        when = int(time.time() * 1000)
+        await asyncio.get_event_loop().run_in_executor(
+            None, self.cassandra.execute,
+            self.mark_chunk_embeddings_stored_stmt,
+            (when, user, document_id, chunk_id)
+        )
+
+    async def increment_triples_stored(self, user, document_id):
+        """Increment triples_stored counter (DEPRECATED: use mark_chunk_triples_stored)"""
+        # Read current value, increment, write back
+        progress = await self.get_chunk_progress(user, document_id)
+        
+        # If row doesn't exist, initialize it first (race condition protection)
+        if progress["total_chunks"] == 0:
+            logger.warning(f"Chunk progress row doesn't exist for {user}/{document_id}, initializing with total_chunks=0")
+            await self.init_chunk_progress(user, document_id, 0)
+            progress = await self.get_chunk_progress(user, document_id)
+        
+        new_value = progress["triples_stored"] + 1
+        when = int(time.time() * 1000)
+        await asyncio.get_event_loop().run_in_executor(
+            None, self.cassandra.execute,
+            self.increment_triples_stored_stmt,
+            (new_value, when, user, document_id)
+        )
+
+    async def increment_embeddings_stored(self, user, document_id):
+        """Increment embeddings_stored counter (DEPRECATED: use mark_chunk_embeddings_stored)"""
+        # Read current value, increment, write back
+        progress = await self.get_chunk_progress(user, document_id)
+        
+        # If row doesn't exist, initialize it first (race condition protection)
+        if progress["total_chunks"] == 0:
+            logger.warning(f"Chunk progress row doesn't exist for {user}/{document_id}, initializing with total_chunks=0")
+            await self.init_chunk_progress(user, document_id, 0)
+            progress = await self.get_chunk_progress(user, document_id)
+        
+        new_value = progress["embeddings_stored"] + 1
+        when = int(time.time() * 1000)
+        await asyncio.get_event_loop().run_in_executor(
+            None, self.cassandra.execute,
+            self.increment_embeddings_stored_stmt,
+            (new_value, when, user, document_id)
+        )
+
+    async def increment_failed_chunks(self, user, document_id):
+        """Increment failed_chunks counter"""
+        # Read current value, increment, write back
+        progress = await self.get_chunk_progress(user, document_id)
+        new_value = progress["failed_chunks"] + 1
+        when = int(time.time() * 1000)
+        await asyncio.get_event_loop().run_in_executor(
+            None, self.cassandra.execute,
+            self.increment_failed_chunks_stmt,
+            (new_value, when, user, document_id)
+        )
+
+    async def get_chunk_progress(self, user, document_id):
+        """Get chunk progress for a document"""
+        # Get aggregate counts
+        resp = await asyncio.get_event_loop().run_in_executor(
+            None, self.cassandra.execute,
+            self.get_chunk_progress_stmt,
+            (user, document_id)
+        )
+        
+        rows = list(resp)
+        if not rows:
+            return {
+                "total_chunks": 0,
+                "triples_stored": 0,
+                "embeddings_stored": 0,
+                "failed_chunks": 0,
+                "last_updated": 0,
+            }
+        
+        row = rows[0]
+        total_chunks = row[0] or 0
+        
+        # Get unique chunk counts from chunk_processing_status
+        status_resp = await asyncio.get_event_loop().run_in_executor(
+            None, self.cassandra.execute,
+            self.get_chunk_processing_status_stmt,
+            (user, document_id)
+        )
+        
+        unique_triples_stored = sum(1 for status_row in status_resp if status_row[1])  # triples_stored column
+        unique_embeddings_stored = sum(1 for status_row in status_resp if status_row[2])  # embeddings_stored column
+        
+        # Use unique counts if available, otherwise fall back to aggregate counts
+        triples_stored = unique_triples_stored if unique_triples_stored > 0 else (row[1] or 0)
+        embeddings_stored = unique_embeddings_stored if unique_embeddings_stored > 0 else (row[2] or 0)
+        
+        return {
+            "total_chunks": total_chunks,
+            "triples_stored": min(triples_stored, total_chunks) if total_chunks > 0 else 0,
+            "embeddings_stored": min(embeddings_stored, total_chunks) if total_chunks > 0 else 0,
+            "failed_chunks": row[3] or 0,
+            "last_updated": int(row[4].timestamp() * 1000) if row[4] else 0,
+        }

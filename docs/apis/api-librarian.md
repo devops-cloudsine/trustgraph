@@ -141,13 +141,36 @@ Response:
 }
 ```
 
-### LIST-DOCUMENTS - List User's Documents
+### LIST-DOCUMENTS - List Documents
 
-Request:
+List documents filtered by user, collection, or both. At least one filter parameter must be provided.
+
+**Filtering Options:**
+- **user only**: Returns all documents for the specified user
+- **collection only**: Returns all documents in the specified collection (across all users)
+- **user + collection**: Returns documents for the specified user in the specified collection
+
+Request (with both filters):
 ```json
 {
     "operation": "list-documents",
     "user": "alice",
+    "collection": "research"
+}
+```
+
+Request (user only):
+```json
+{
+    "operation": "list-documents",
+    "user": "alice"
+}
+```
+
+Request (collection only):
+```json
+{
+    "operation": "list-documents",
     "collection": "research"
 }
 ```
@@ -202,6 +225,22 @@ Response:
 ```
 
 ### REMOVE-DOCUMENT - Remove Document
+
+Permanently removes a document and all associated data from the TrustGraph system. This operation performs a **cascade delete** that removes:
+
+- **Document embeddings**: All chunked document text and vector embeddings used for retrieval
+- **Knowledge graph data**: RDF triples and graph embeddings extracted from the document
+- **Processing records**: All processing job history associated with the document
+- **Document blob**: Raw document content stored in MinIO
+- **Document metadata**: Document entry in the library catalog
+
+**Warning**: This operation is **irreversible** and permanently deletes all data. Ensure you have backups if the document might be needed in the future.
+
+**Note**: After removal, the document will no longer appear in:
+- Document library listings
+- Document retrieval queries
+- Knowledge graph queries
+- Processing history
 
 Request:
 ```json
@@ -320,6 +359,60 @@ Response:
 - `pending` - Document exists but no processing has been started
 - `processing` - Processing has been started but no embeddings found yet
 - `completed` - Embeddings have been generated and stored
+
+### GET-GRAPH-STATUS - Check Graph Extraction Status
+
+Check whether a document's graph entities and triples have been extracted and stored. This endpoint provides chunk-level progress tracking to reliably determine when graph processing is complete.
+
+Request:
+```json
+{
+    "operation": "get-graph-status",
+    "document-id": "doc-123",
+    "user": "alice",
+    "collection": "research"
+}
+```
+
+Response:
+```json
+{
+    "graph-status": {
+        "document-id": "doc-123",
+        "user": "alice",
+        "collection": "research",
+        "status": "processing",
+        "triples-count": 387,
+        "graph-embeddings-count": 156,
+        "chunks-total": 10,
+        "chunks-processed": 7,
+        "triples-stored": 8,
+        "embeddings-stored": 7,
+        "failed-chunks": 0,
+        "last-updated": 1640995650000
+    }
+}
+```
+
+**Status Values:**
+- `not_found` - Document does not exist in the library
+- `pending` - Document exists but has not been chunked yet (`chunks-total` = 0)
+- `processing` - Graph extraction is in progress (`chunks-processed` < `chunks-total`)
+- `completed` - All chunks have been processed (`chunks-processed` >= `chunks-total`)
+- `failed` - Some chunks failed processing (`failed-chunks` > 0)
+
+**Field Descriptions:**
+- `chunks-total`: Total number of chunks created from the document
+- `chunks-processed`: Number of chunks fully processed (minimum of `triples-stored` and `embeddings-stored`)
+- `triples-stored`: Number of chunks with triples stored in user keyspace (for graph queries)
+- `embeddings-stored`: Number of chunks with graph embeddings stored in vector database
+- `failed-chunks`: Number of chunks that failed processing
+- `triples-count`: Total number of triples extracted (informational, from knowledge keyspace)
+- `graph-embeddings-count`: Total number of graph embeddings created (informational, from knowledge keyspace)
+- `last-updated`: Unix timestamp (milliseconds) of the most recent progress update
+
+**Completion Logic:**
+A chunk is considered "processed" only when **both** triples and graph embeddings have been stored. The `chunks-processed` value is the minimum of `triples-stored` and `embeddings-stored`, ensuring that status is "completed" only when all chunks have been fully processed and are ready for graph-retrieval queries.
 
 ## REST service
 

@@ -17,6 +17,7 @@ from .... base import ConsumerMetrics, ProducerMetrics
 from .... base.cassandra_config import add_cassandra_args, resolve_cassandra_config
 from .... schema import StorageManagementRequest, StorageManagementResponse, Error
 from .... schema import triples_storage_management_topic, storage_management_response_topic
+from .... tables.library import LibraryTableStore
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -54,6 +55,14 @@ class Processor(TriplesStoreService):
         self.cassandra_password = password
         self.table = None
 
+        # Initialize library store for chunk progress tracking
+        self.library_store = LibraryTableStore(
+            cassandra_host=hosts,
+            cassandra_username=username,
+            cassandra_password=password,
+            keyspace="librarian",
+        )
+
         # Set up metrics for storage management
         storage_request_metrics = ConsumerMetrics(
             processor=self.id, flow=None, name="storage-request"
@@ -83,6 +92,7 @@ class Processor(TriplesStoreService):
         )
 
     async def store_triples(self, message):
+        logger.info(f"store_triples called for document {message.metadata.id}, user {message.metadata.user}, collection {message.metadata.collection}, triples count: {len(message.triples) if message.triples else 0}")
 
         user = message.metadata.user
 
@@ -123,8 +133,34 @@ class Processor(TriplesStoreService):
                 message.metadata.collection,
                 t.s.value,
                 t.p.value,
-                t.o.value
+                t.o.value,
+                message.metadata.id  # ADD document_id from metadata
             )
+        
+        # Track progress: triples stored for this chunk (using chunk_id if available)
+        chunk_id = getattr(message.metadata, 'chunk_id', None) or ""
+        logger.info(f"About to mark triples_stored for document {message.metadata.id}, chunk_id={chunk_id}, user {message.metadata.user}")
+        try:
+            if not hasattr(self, 'library_store') or self.library_store is None:
+                logger.error("library_store is not initialized!")
+            else:
+                if chunk_id:
+                    await self.library_store.mark_chunk_triples_stored(
+                        user=message.metadata.user,
+                        document_id=message.metadata.id,
+                        chunk_id=chunk_id
+                    )
+                    logger.info(f"Marked triples_stored for chunk {chunk_id} of document {message.metadata.id}")
+                else:
+                    # Fallback to old method if chunk_id not available
+                    await self.library_store.increment_triples_stored(
+                        user=message.metadata.user,
+                        document_id=message.metadata.id
+                    )
+                    logger.info(f"Incremented triples_stored for {message.metadata.id} (no chunk_id)")
+        except Exception as e:
+            logger.error(f"Failed to update chunk progress: {e}", exc_info=True)
+            # Don't fail the storage operation if tracking fails
 
     async def start(self):
         """Start the processor and its storage management consumer"""

@@ -18,3 +18,8 @@ vertexai/
 .venv/
 files_to_parse/
 /home/ubuntu/Github/trustgraph/deployment/.env
+deployment/.env
+
+deployment/minio-data/
+
+venv/

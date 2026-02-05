@@ -389,6 +389,16 @@ class Processor(FlowProcessor):
 
     @staticmethod
     def add_args(parser):
+        parser.add_argument(
+            '--vllm-api-url',
+            default='http://vllm-vision-server:8000/v1/chat/completions',
+            help='vLLM API URL for image descriptions (default: http://vllm:8000/v1/chat/completions)'
+        )
+        parser.add_argument(
+            '--vllm-model',
+            default='google/gemma-3-4b-it',
+            help='vLLM model name (default: Qwen/Qwen3-VL-4B-Instruct)'
+        )
         FlowProcessor.add_args(parser)
 
     # // ---> [_safe_id] > sanitize directory name
@@ -1030,6 +1040,7 @@ class Processor(FlowProcessor):
                     content = (choice.get("message") or {}).get("content", "")
 
                     if isinstance(content, str):
+                        logger.info(f"vLLM image description: {content.strip()}")
                         return content.strip()
                     if isinstance(content, list):
                         return "\n".join(c.get("text", "") for c in content if c.get("type") == "text")

@@ -774,6 +774,13 @@
             "triples-request": "non-persistent://tg/request/triples:{id}",
             "triples-response": "non-persistent://tg/response/triples:{id}"
           },
+          "kg-extract-agent:{id}": {
+            "agent-request": "non-persistent://tg/request/agent:{id}",
+            "agent-response": "non-persistent://tg/response/agent:{id}",
+            "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}",
+            "input": "persistent://tg/flow/chunk-load:{id}",
+            "triples": "persistent://tg/flow/triples-store:{id}"
+          },
           "kg-extract-definitions:{id}": {
             "entity-contexts": "persistent://tg/flow/entity-contexts-load:{id}",
             "input": "persistent://tg/flow/chunk-load:{id}",
@@ -894,6 +901,10 @@
           },
           "triples-write:{id}": {
             "input": "persistent://tg/flow/triples-store:{id}"
+          },
+          "kg-store:{id}": {
+            "triples-input": "persistent://tg/flow/triples-store:{id}",
+            "graph-embeddings-input": "persistent://tg/flow/graph-embeddings-store:{id}"
           },
           "graph-retrieval:{id}": {
             "request": "non-persistent://tg/request/graph-retrieval:{id}",
@@ -2034,8 +2045,8 @@
         "parameters": {
           "chunk-overlap": "50",
           "chunk-size": "2000",
-          "llm-model": "Qwen/Qwen3-VL-4B-Instruct",
-          "llm-rag-model": "Qwen/Qwen3-VL-4B-Instruct",
+                    "llm-model": "google/gemma-3-4b-it",
+                    "llm-rag-model": "google/gemma-3-4b-it",
           "llm-rag-temperature": "0.300",
           "llm-temperature": "0.300"
         }
@@ -2275,14 +2286,14 @@
       },
       "text-completion": {
         "default": {
-          "model": "Qwen/Qwen3-VL-4B-Instruct",
+          "model": "google/gemma-3-4b-it",
           "request": "non-persistent://tg/request/text-completion:default",
           "response": "non-persistent://tg/response/text-completion:default"
         }
       },
       "text-completion-rag": {
         "default": {
-          "model": "Qwen/Qwen3-VL-4B-Instruct",
+          "model": "google/gemma-3-4b-it",
           "request": "non-persistent://tg/request/text-completion-rag:default",
           "response": "non-persistent://tg/response/text-completion-rag:default"
         }
@@ -2425,7 +2436,7 @@
         "type": "integer"
       },
       "llm-model": {
-        "default": "Qwen/Qwen3-VL-4B-Instruct",
+        "default": "google/gemma-3-4b-it",
         "description": "LLM model to use",
         "enum": [
           {

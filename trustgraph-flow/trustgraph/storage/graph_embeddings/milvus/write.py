@@ -9,8 +9,10 @@ from .... direct.milvus_graph_embeddings import EntityVectors
 from .... base import GraphEmbeddingsStoreService
 from .... base import AsyncProcessor, Consumer, Producer
 from .... base import ConsumerMetrics, ProducerMetrics
+from .... base.cassandra_config import resolve_cassandra_config
 from .... schema import StorageManagementRequest, StorageManagementResponse, Error
 from .... schema import vector_storage_management_topic, storage_management_response_topic
+from .... tables.library import LibraryTableStore
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -31,6 +33,20 @@ class Processor(GraphEmbeddingsStoreService):
         )
 
         self.vecstore = EntityVectors(store_uri)
+
+        # Initialize library store for chunk progress tracking
+        hosts, username, password = resolve_cassandra_config(
+            host=params.get("cassandra_host"),
+            username=params.get("cassandra_username"),
+            password=params.get("cassandra_password")
+        )
+
+        self.library_store = LibraryTableStore(
+            cassandra_host=hosts,
+            cassandra_username=username,
+            cassandra_password=password,
+            keyspace="librarian",
+        )
 
         # Set up metrics for storage management
         storage_request_metrics = ConsumerMetrics(
@@ -86,6 +102,25 @@ class Processor(GraphEmbeddingsStoreService):
                         message.metadata.user,
                         message.metadata.collection
                     )
+        
+        # Track progress: graph embeddings stored for this chunk
+        try:
+            chunk_id = getattr(message.metadata, 'chunk_id', None) or ""
+            if chunk_id:
+                await self.library_store.mark_chunk_embeddings_stored(
+                    user=message.metadata.user,
+                    document_id=message.metadata.id,
+                    chunk_id=chunk_id
+                )
+                logger.info(f"Marked embeddings_stored for chunk {chunk_id} of document {message.metadata.id}")
+            else:
+                await self.library_store.increment_embeddings_stored(
+                    user=message.metadata.user,
+                    document_id=message.metadata.id
+                )
+                logger.info(f"Incremented embeddings_stored for {message.metadata.id} (no chunk_id)")
+        except Exception as e:
+            logger.error(f"Failed to update chunk progress: {e}", exc_info=True)
 
     @staticmethod
     def add_args(parser):

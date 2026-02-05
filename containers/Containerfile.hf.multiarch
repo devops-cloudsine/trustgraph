@@ -15,7 +15,20 @@ RUN dnf install -y python3.12 && \
   pip3 install --no-cache-dir pulsar-client==3.7.0 && \
   dnf clean all
 
-RUN pip3 install torch==2.5.1
+# Architecture-aware PyTorch installation
+RUN set -eux; \
+    ARCH=$(uname -m); \
+    echo "Detected architecture: $ARCH"; \
+    if [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "amd64" ]; then \
+        echo "Installing PyTorch with x86_64 CPU optimizations..."; \
+        pip3 install torch==2.5.1+cpu --index-url https://download.pytorch.org/whl/cpu; \
+    elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
+        echo "Installing PyTorch for ARM64..."; \
+        pip3 install torch==2.5.1; \
+    else \
+        echo "Unknown architecture, installing generic PyTorch..."; \
+        pip3 install torch==2.5.1; \
+    fi
 
 RUN pip3 install --no-cache-dir \
     langchain==0.3.25 langchain-core==0.3.60 langchain-huggingface==0.2.0 \

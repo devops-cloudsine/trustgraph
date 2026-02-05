@@ -13,4 +13,7 @@ class Metadata(Record):
     # Collection management
     user = String()
     collection = String()
+    
+    # Chunk identifier (for tracking chunk-level processing progress)
+    chunk_id = String(default="", required=False)
 

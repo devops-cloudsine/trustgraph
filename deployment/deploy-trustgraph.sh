@@ -15,7 +15,7 @@
 set -euo pipefail
 
 # Configuration
-COMPOSE_DIR="/home/ubuntu"
+COMPOSE_DIR="/home/cloudsineai/Desktop/trustgraph/deployment"
 COMPOSE_FILE="${COMPOSE_DIR}/docker-compose.yaml"
 OVERRIDE_FILE="${COMPOSE_DIR}/docker-compose.override.yaml"
 
@@ -279,16 +279,16 @@ build_images() {
     # Build flow dev image
     log_info "Building trustgraph-flow:dev..."
     docker build --no-cache \
-        -f /home/ubuntu/Github/trustgraph/Containerfile.dev \
+        -f /home/cloudsineai/Desktop/trustgraph/Containerfile.dev \
         -t docker.io/trustgraph/trustgraph-flow:dev \
-        /home/ubuntu/Github/trustgraph
+        /home/cloudsineai/Desktop/trustgraph
     
     # Build OCR dev image
     log_info "Building trustgraph-ocr:dev..."
     docker build --no-cache \
-        -f /home/ubuntu/Github/trustgraph/Containerfile.ocr.dev \
+        -f /home/cloudsineai/Desktop/trustgraph/Containerfile.ocr.dev \
         -t trustgraph-ocr-dev:latest \
-        /home/ubuntu/Github/trustgraph
+        /home/cloudsineai/Desktop/trustgraph
     
     log_ok "Images built!"
 }

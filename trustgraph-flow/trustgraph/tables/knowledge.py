@@ -198,6 +198,11 @@ class KnowledgeTableStore:
             WHERE user = ? AND document_id = ?
         """)
 
+        self.delete_document_embeddings_stmt = self.cassandra.prepare("""
+            DELETE FROM document_embeddings
+            WHERE user = ? AND document_id = ?
+        """)
+
     async def add_triples(self, m):
 
         when = int(time.time() * 1000)
@@ -390,6 +395,23 @@ class KnowledgeTableStore:
                 logger.error("Exception occurred", exc_info=True)
                 raise e
 
+    async def delete_document_embeddings(self, user, document_id):
+        """Delete all document embeddings for a specific document"""
+        logger.debug(f"Deleting document embeddings for {user}/{document_id}...")
+        
+        while True:
+            try:
+                resp = self.cassandra.execute(
+                    self.delete_document_embeddings_stmt,
+                    (user, document_id)
+                )
+                break
+            except Exception as e:
+                logger.error("Exception occurred", exc_info=True)
+                raise e
+        
+        logger.debug("Document embeddings deleted")
+
     async def get_triples(self, user, document_id, receiver):
 
         logger.debug("Get triples...")
@@ -500,4 +522,76 @@ class KnowledgeTableStore:
             )                    
 
         logger.debug("Done")
+
+    async def get_graph_status(self, user, document_id):
+        """
+        Query graph processing status by counting triples and graph embeddings.
+        Returns counts and latest timestamp for a document.
+        
+        Args:
+            user: User identifier
+            document_id: Document identifier
+            
+        Returns:
+            dict with keys: triples_count, graph_embeddings_count, last_updated
+        """
+        logger.debug(f"Getting graph status for {user}/{document_id}")
+
+        triples_count = 0
+        graph_embeddings_count = 0
+        latest_time = 0
+
+        # Query triples
+        try:
+            resp = self.cassandra.execute(
+                self.get_triples_stmt,
+                (user, document_id)
+            )
+
+            for row in resp:
+                # row[0] = id (uuid)
+                # row[1] = time (timestamp)
+                # row[2] = metadata
+                # row[3] = triples (list of tuples)
+                
+                if row[1]:
+                    row_time = int(row[1].timestamp() * 1000)
+                    if row_time > latest_time:
+                        latest_time = row_time
+                
+                if row[3]:
+                    triples_count += len(row[3])
+
+        except Exception as e:
+            logger.error(f"Error querying triples status: {e}", exc_info=True)
+
+        # Query graph embeddings
+        try:
+            resp = self.cassandra.execute(
+                self.get_graph_embeddings_stmt,
+                (user, document_id)
+            )
+
+            for row in resp:
+                # row[0] = id (uuid)
+                # row[1] = time (timestamp)
+                # row[2] = metadata
+                # row[3] = entity_embeddings (list of tuples)
+                
+                if row[1]:
+                    row_time = int(row[1].timestamp() * 1000)
+                    if row_time > latest_time:
+                        latest_time = row_time
+                
+                if row[3]:
+                    graph_embeddings_count += len(row[3])
+
+        except Exception as e:
+            logger.error(f"Error querying graph embeddings status: {e}", exc_info=True)
+
+        return {
+            "triples_count": triples_count,
+            "graph_embeddings_count": graph_embeddings_count,
+            "last_updated": latest_time,
+        }
 

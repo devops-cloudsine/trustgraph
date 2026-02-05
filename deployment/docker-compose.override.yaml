@@ -1,19 +1,17 @@
-version: "3.8"
-
 x-trustgraph-dev: &trustgraph_dev
   image: docker.io/trustgraph/trustgraph-flow:dev
   volumes:
-    - /home/ubuntu/Github/trustgraph/trustgraph-base:/src/trustgraph-base
-    - /home/ubuntu/Github/trustgraph/trustgraph-flow:/src/trustgraph-flow
+    - /home/cloudsineai/Desktop/trustgraph/trustgraph-base:/src/trustgraph-base
+    - /home/cloudsineai/Desktop/trustgraph/trustgraph-flow:/src/trustgraph-flow
 
 x-trustgraph-ocr-dev: &trustgraph_ocr_dev
   build:
-    context: /home/ubuntu/Github/trustgraph
+    context: /home/cloudsineai/Desktop/trustgraph
     dockerfile: Containerfile.ocr.dev
-  image: trustgraph-ocr-dev:latest
+  image: docker.io/trustgraph/trustgraph-ocr:dev
   volumes:
-    - /home/ubuntu/Github/trustgraph/trustgraph-base:/src/trustgraph-base
-    - /home/ubuntu/Github/trustgraph/trustgraph-ocr:/src/trustgraph-ocr
+    - /home/cloudsineai/Desktop/trustgraph/trustgraph-base:/src/trustgraph-base
+    - /home/cloudsineai/Desktop/trustgraph/trustgraph-ocr:/src/trustgraph-ocr
 
 services:
   api-gateway:

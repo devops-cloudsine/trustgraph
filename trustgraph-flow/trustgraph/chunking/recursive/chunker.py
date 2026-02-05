@@ -10,6 +10,8 @@ from prometheus_client import Histogram
 
 from ... schema import TextDocument, Chunk
 from ... base import ChunkingService, ConsumerSpec, ProducerSpec
+from ... tables.library import LibraryTableStore
+from ... base.cassandra_config import resolve_cassandra_config
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -31,6 +33,20 @@ class Processor(ChunkingService):
         # Store default values for parameter override
         self.default_chunk_size = chunk_size
         self.default_chunk_overlap = chunk_overlap
+
+        # Initialize library store for chunk progress tracking
+        hosts, username, password = resolve_cassandra_config(
+            host=params.get("cassandra_host"),
+            username=params.get("cassandra_username"),
+            password=params.get("cassandra_password")
+        )
+
+        self.library_store = LibraryTableStore(
+            cassandra_host=hosts,
+            cassandra_username=username,
+            cassandra_password=password,
+            keyspace="librarian",
+        )
 
         if not hasattr(__class__, "chunk_metric"):
             __class__.chunk_metric = Histogram(
@@ -94,12 +110,35 @@ class Processor(ChunkingService):
             [v.text.decode("utf-8")]
         )
 
+        # Record total chunks for progress tracking
+        total_chunks = len(texts)
+        logger.info(f"Document {v.metadata.id} split into {total_chunks} chunks")
+
+        await self.library_store.init_chunk_progress(
+            user=v.metadata.user,
+            document_id=v.metadata.id,
+            total_chunks=total_chunks
+        )
+
         for ix, chunk in enumerate(texts):
 
             logger.debug(f"Created chunk of size {len(chunk.page_content)}")
 
+            # Create chunk_id: document_id + chunk index
+            chunk_id = f"{v.metadata.id}_{ix}"
+            
+            # Create metadata with chunk_id
+            from ...schema.core.metadata import Metadata
+            chunk_metadata = Metadata(
+                id=v.metadata.id,
+                metadata=v.metadata.metadata if v.metadata.metadata else [],
+                user=v.metadata.user,
+                collection=v.metadata.collection,
+                chunk_id=chunk_id
+            )
+
             r = Chunk(
-                metadata=v.metadata,
+                metadata=chunk_metadata,
                 chunk=chunk.page_content.encode("utf-8"),
             )
 

@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+
+import requests
+import json
+import sys
+import time
+
+url = "http://localhost:8088/api/v1/"
+
+############################################################################
+
+# Test document ID - replace with an actual document ID in your system
+document_id = "http://trustgraph.ai/doc/test-graph-status"
+user = "trustgraph"
+collection = "default"
+
+print("=" * 70)
+print("Testing GET-GRAPH-STATUS endpoint")
+print("=" * 70)
+print()
+
+# Test 1: Query graph status
+print("Test 1: Query graph status for document")
+print(f"  Document ID: {document_id}")
+print(f"  User: {user}")
+print(f"  Collection: {collection}")
+print()
+
+input_data = {
+    "operation": "get-graph-status",
+    "user": user,
+    "document-id": document_id,
+    "collection": collection,
+}
+
+try:
+    resp = requests.post(
+        f"{url}librarian",
+        json=input_data,
+    )
+    
+    print(f"Response Status: {resp.status_code}")
+    print()
+    
+    if resp.status_code != 200:
+        print(f"Error: HTTP {resp.status_code}")
+        print(resp.text)
+        sys.exit(1)
+    
+    result = resp.json()
+    
+    if "error" in result and result["error"]:
+        print(f"Error: {result['error']}")
+        sys.exit(1)
+    
+    if "graph-status" in result:
+        graph_status = result["graph-status"]
+        
+        print("Graph Status:")
+        print(f"  Status: {graph_status.get('status', 'N/A')}")
+        print(f"  Triples Count: {graph_status.get('triples-count', 0)}")
+        print(f"  Graph Embeddings Count: {graph_status.get('graph-embeddings-count', 0)}")
+        print(f"  Last Updated: {graph_status.get('last-updated', 0)}")
+        print()
+        
+        # Interpret status
+        status = graph_status.get('status', 'unknown')
+        if status == 'not_found':
+            print("⚠️  Document not found in library")
+        elif status == 'pending':
+            print("⏳ Graph extraction pending - no processing started yet")
+        elif status == 'processing':
+            print("🔄 Graph extraction in progress")
+        elif status == 'completed':
+            print("✅ Graph extraction completed!")
+            print(f"   - {graph_status.get('triples-count', 0)} triples extracted")
+            print(f"   - {graph_status.get('graph-embeddings-count', 0)} entity embeddings generated")
+        else:
+            print(f"❓ Unknown status: {status}")
+        
+        print()
+        print("Full Response:")
+        print(json.dumps(result, indent=2))
+        
+    else:
+        print("Error: No graph-status in response")
+        print(json.dumps(result, indent=2))
+        sys.exit(1)
+    
+    print()
+    print("=" * 70)
+    print("Test completed successfully!")
+    print("=" * 70)
+    
+    sys.exit(0)
+
+except requests.exceptions.ConnectionError:
+    print("❌ Error: Could not connect to API gateway")
+    print(f"   Make sure the service is running at {url}")
+    sys.exit(1)
+except Exception as e:
+    print(f"❌ Error: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+
+############################################################################
+

@@ -46,7 +46,7 @@ default_minio_secret_key = "minioadmin"
 default_cassandra_host = "cassandra"
 default_qdrant_uri = "http://qdrant:6333"
 
-bucket_name = "library"
+bucket_name = "trustgraph-library"
 
 # FIXME: How to ensure this doesn't conflict with other usage?
 keyspace = "librarian"
@@ -368,6 +368,7 @@ class Processor(AsyncProcessor):
             "list-documents": self.librarian.list_documents,
             "list-processing": self.librarian.list_processing,
             "get-document-status": self.librarian.get_document_status,
+            "get-graph-status": self.librarian.get_graph_status,
         }
 
         if v.operation not in impls:

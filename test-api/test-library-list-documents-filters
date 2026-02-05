@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+
+import requests
+import json
+import sys
+
+url = "http://localhost:8088/api/v1/"
+
+############################################################################
+# Test 1: List documents by user only
+############################################################################
+
+print("=" * 60)
+print("Test 1: List documents by USER ONLY")
+print("=" * 60)
+
+input1 = {
+    "operation": "list-documents",
+    "user": "trustgraph",
+}
+
+resp = requests.post(
+    f"{url}librarian",
+    json=input1,
+)
+
+print(f"Request: {json.dumps(input1, indent=2)}")
+print(f"Status Code: {resp.status_code}")
+
+try:
+    resp_data = resp.json()
+    print(f"Response: {json.dumps(resp_data, indent=2)}")
+    
+    if "error" in resp_data and resp_data["error"]:
+        print(f"❌ Test 1 Failed: {resp_data['error']}")
+    else:
+        doc_count = len(resp_data.get("document-metadatas", []))
+        print(f"✅ Test 1 Passed: Found {doc_count} documents for user 'trustgraph'")
+except Exception as e:
+    print(f"❌ Test 1 Failed: {e}")
+    print(f"Response text: {resp.text}")
+
+############################################################################
+# Test 2: List documents by collection only
+############################################################################
+
+print("\n" + "=" * 60)
+print("Test 2: List documents by COLLECTION ONLY")
+print("=" * 60)
+
+input2 = {
+    "operation": "list-documents",
+    "collection": "default",
+}
+
+resp = requests.post(
+    f"{url}librarian",
+    json=input2,
+)
+
+print(f"Request: {json.dumps(input2, indent=2)}")
+print(f"Status Code: {resp.status_code}")
+
+try:
+    resp_data = resp.json()
+    print(f"Response: {json.dumps(resp_data, indent=2)}")
+    
+    if "error" in resp_data and resp_data["error"]:
+        print(f"❌ Test 2 Failed: {resp_data['error']}")
+    else:
+        doc_count = len(resp_data.get("document-metadatas", []))
+        print(f"✅ Test 2 Passed: Found {doc_count} documents in collection 'default'")
+except Exception as e:
+    print(f"❌ Test 2 Failed: {e}")
+    print(f"Response text: {resp.text}")
+
+############################################################################
+# Test 3: List documents by both user and collection
+############################################################################
+
+print("\n" + "=" * 60)
+print("Test 3: List documents by USER AND COLLECTION")
+print("=" * 60)
+
+input3 = {
+    "operation": "list-documents",
+    "user": "trustgraph",
+    "collection": "default",
+}
+
+resp = requests.post(
+    f"{url}librarian",
+    json=input3,
+)
+
+print(f"Request: {json.dumps(input3, indent=2)}")
+print(f"Status Code: {resp.status_code}")
+
+try:
+    resp_data = resp.json()
+    print(f"Response: {json.dumps(resp_data, indent=2)}")
+    
+    if "error" in resp_data and resp_data["error"]:
+        print(f"❌ Test 3 Failed: {resp_data['error']}")
+    else:
+        doc_count = len(resp_data.get("document-metadatas", []))
+        print(f"✅ Test 3 Passed: Found {doc_count} documents for user 'trustgraph' in collection 'default'")
+except Exception as e:
+    print(f"❌ Test 3 Failed: {e}")
+    print(f"Response text: {resp.text}")
+
+############################################################################
+# Test 4: Error case - neither user nor collection provided
+############################################################################
+
+print("\n" + "=" * 60)
+print("Test 4: Error case - NO FILTERS PROVIDED")
+print("=" * 60)
+
+input4 = {
+    "operation": "list-documents",
+}
+
+resp = requests.post(
+    f"{url}librarian",
+    json=input4,
+)
+
+print(f"Request: {json.dumps(input4, indent=2)}")
+print(f"Status Code: {resp.status_code}")
+
+try:
+    resp_data = resp.json()
+    print(f"Response: {json.dumps(resp_data, indent=2)}")
+    
+    if "error" in resp_data and resp_data["error"]:
+        print(f"✅ Test 4 Passed: Expected error received - {resp_data['error']}")
+    else:
+        print(f"❌ Test 4 Failed: Expected error but got success")
+except Exception as e:
+    print(f"❌ Test 4 Failed: {e}")
+    print(f"Response text: {resp.text}")
+
+############################################################################
+# Summary
+############################################################################
+
+print("\n" + "=" * 60)
+print("SUMMARY")
+print("=" * 60)
+print("All tests completed. Review results above.")
+print("=" * 60)
+
+sys.exit(0)
+

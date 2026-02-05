@@ -231,6 +231,16 @@ class Processor(FlowProcessor):
 
     @staticmethod
     def add_args(parser):
+        parser.add_argument(
+            '--vllm-api-url',
+            default='http://vllm-vision-server:8000/v1/chat/completions',
+            help='vLLM API URL for image descriptions (default: http://vllm:8000/v1/chat/completions)'
+        )
+        parser.add_argument(
+            '--vllm-model',
+            default='google/gemma-3-4b-it',
+            help='vLLM model name (default: Qwen/Qwen3-VL-4B-Instruct)'
+        )
         FlowProcessor.add_args(parser)
 
     # // ---> on_message > [_is_image] > check if blob is an image file
@@ -346,6 +356,7 @@ class Processor(FlowProcessor):
             msg = choice.get("message") or {}
             content = msg.get("content")
             if isinstance(content, str):
+                logger.info(f"vLLM image description: {content.strip()}")
                 return content.strip()
             # Some implementations may return list content parts
             if isinstance(content, list):

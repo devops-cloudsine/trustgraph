@@ -1,4 +1,4 @@
-FROM docker.io/trustgraph/trustgraph-flow:local
+FROM docker.io/trustgraph/trustgraph-flow:1.6.5
 
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
@@ -51,6 +51,22 @@ RUN set -eux; \
 # This avoids pip installing them on every rebuild when source code changes.
 RUN python -m pip install --no-cache-dir --upgrade pip && \
     python -m pip install --no-cache-dir "unstructured[all-docs]" pillow pytesseract Spire.PDF Spire.Doc requests asyncio minio
+
+# Architecture-specific ONNX Runtime installation
+# GPU version for x86_64, CPU version for ARM64
+RUN set -eux; \
+    ARCH=$(uname -m); \
+    echo "Detected architecture: $ARCH"; \
+    if [ "$ARCH" = "x86_64" ] || [ "$ARCH" = "amd64" ]; then \
+        echo "Installing onnxruntime-gpu for x86_64..."; \
+        python -m pip uninstall -y onnxruntime || true; \
+        python -m pip install --no-cache-dir "onnxruntime-gpu>=1.17,<1.19"; \
+    elif [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
+        echo "Installing onnxruntime (CPU) for ARM64..."; \
+        python -m pip install --no-cache-dir onnxruntime; \
+    else \
+        echo "Unknown architecture: $ARCH. Skipping onnxruntime."; \
+    fi
 
 # Provide a fallback copy of the sources in case the container is
 # started without bind-mounting the repository.

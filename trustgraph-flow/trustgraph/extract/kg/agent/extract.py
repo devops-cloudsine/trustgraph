@@ -107,6 +107,7 @@ class Processor(FlowProcessor):
                 metadata = [],
                 user = metadata.user,
                 collection = metadata.collection,
+                chunk_id = getattr(metadata, 'chunk_id', None) or "",
             ),
             triples = triples,
         )
